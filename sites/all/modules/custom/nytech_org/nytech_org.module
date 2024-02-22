@@ -1,0 +1,358 @@
+<?php
+module_load_include('inc', basename(__DIR__), basename(__DIR__) . '.vars');
+
+/**
+ * Implements hook_menu().
+ */
+function nytech_org_menu() {
+  $items = [];
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/view');
+  $item->title('Organization');
+  $item->page_callback('screen_org_view');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/locations');
+  $item->title('Locations');
+  $item->page_callback('screen_org_locations');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/assets');
+  $item->title('Assets');
+  $item->page_callback('screen_org_assets');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/members');
+  $item->title('Member');
+  $item->page_callback('screen_org_members');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  return $items;
+}
+
+function nytech_org_theme($existing, $type, $theme, $path) {
+  $theme = [];
+
+  $item = new NyTechTheme('nytech_org_listed', __DIR__);
+  $theme = $item->item($theme);
+
+  $item = new NyTechTheme('nytech_org_page', __DIR__);
+  $theme = $item->item($theme);
+
+  return $theme;
+}
+
+
+
+
+function nytech_org_preprocess_page(&$variables) {
+
+}
+
+
+function nytech_org_entity_presave($entity, $type) {
+
+}
+
+function user_is_org_member($entity_id) {
+  $access = false;
+  global $user;
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'membership')
+    ->entityCondition('bundle', 'standard')
+    ->propertyCondition('uid', $user->uid, '=')
+    ->fieldCondition('field_member_related_org', 'target_id', $entity_id, '=')
+    ->addMetaData('account', user_load(1));
+  $result = $query->execute();
+  if (isset($result['membership'])) {
+    $access = true;
+  }
+  return $access;
+}
+
+class NyTechUserMemberships {
+  public $ids;
+  public $objects;
+  public $load;
+
+  function __construct() {
+    $this->membership = false;
+  }
+
+  public function user($user) {
+    $this->user_id = $user->uid;
+  }
+
+  public function load() {
+    $this->objects = entity_load('membership', $this->ids);
+  }
+
+  private function go() {
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', 'membership')
+      ->entityCondition('bundle', 'standard')
+      ->propertyCondition('uid', $this->user_id, '=')
+      ->fieldCondition('field_member_related_org', 'target_id', $this->user_id, '=')
+      ->addMetaData('account', user_load(1));
+    $result = $query->execute();
+    if (isset($result['membership'])) {
+      $this->ids = array_keys($result['membership']);
+    } else {
+      $this->memberships = false;
+    }
+  }
+}
+
+class NyTechOrgCreate {
+  public $user;
+  public $membership;
+  public $entity;
+
+  public function user($user) {
+    $this->user = $user;
+  }
+
+  public function title($var) {
+    $this->title = $var;
+  }
+
+  public function create() {
+    $edit = [
+      'title' => $this->title,
+      'type' => 'standard',
+    ];
+    $entity = entity_create('organization', $edit);
+    entity_save('organization', $entity);
+    $this->entity = $entity;
+  }
+}
+
+
+class NyTechMembershipCreate {
+  public $user_id;
+  public $org_id;
+  public $role;
+  public $entity;
+
+  public function user($user) {
+    $this->user = $user;
+  }
+
+  public function org($entity_org) {
+    $this->entity_org = $entity_org;
+  }
+
+  public function role($var) {
+    $this->role = $var;
+  }
+
+  public function create() {
+    $title_array = [
+      'title' => $this->entity_org->title,
+      'role' => $this->role,
+      'uid' => $this->user->uid,
+    ];
+    $title = implode('-', $title_array);
+    $edit = [
+      'title' => $title,
+      'type' => 'standard',
+    ];
+    $entity = entity_create('membership', $edit);
+    $entity->field_member_related_org['und'][0]['target_id'] = $this->entity_org->id;
+    $entity->field_member_role['und'][0]['value'] = $this->role;
+    $this->entity = entity_save('organization', $entity);
+  }
+
+
+}
+
+class NyTechUsersOrgs {
+  public $list;
+  public $user;
+  public $objects;
+
+  public function user($user = false) {
+    if($user == false) {
+      global $user;
+    }
+    $this->user = $user;
+  }
+
+  public function go() {
+
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', 'membership')
+      ->entityCondition('bundle', 'standard')
+      ->propertyCondition('uid', $this->user->uid, '=')
+      ->addMetaData('account', user_load(1));
+    $result = $query->execute();
+    if (isset($result['membership'])) {
+
+      $ids = array_keys($result['membership']);
+      $membership_objects = entity_load('membership', $ids);
+      $list = [];
+      foreach($membership_objects as $membership_entity) {
+        $entity_id = $membership_entity->field_member_related_org['und'][0]['target_id'];
+        $role      = $membership_entity->field_member_role['und'][0]['value'];
+        $list[$entity_id] = [
+          'entity_id' => $entity_id,
+          'role' => $role,
+        ];
+      }
+      $this->list = $list;
+      $this->objects = entity_load('organization', array_keys($this->list));
+      $orgs = [];
+      foreach($this->objects as $entity) {
+        $orgs[$entity->id] = [
+          'entity_id' => $entity->id,
+          'role' => $this->list[$entity->id]['role'],
+          'entity' => $entity,
+        ];
+      }
+      $this->orgs = $orgs;
+
+    }
+
+  }
+
+  public function output() {
+    $output = '';
+    foreach($this->orgs as $org) {
+      $array = [
+        'entity_id' => (int) $org['entity_id'],
+        'title' => $org['entity']->title,
+        'role' => member_role($org['role'], 'right'),
+      ];
+      $output .= theme('nytech_org_listed', $array);
+    }
+    $this->output = $output;
+  }
+}
+
+function member_role($role, $pull = 'null') {
+  switch ($role) {
+    case 'manager':
+      $output = '<span class="label label-success pull-' . $pull . '">Manager</span>';
+      break;
+    case 'member':
+      $output = '<span class="label label-info pull-' . $pull . '">Member</span>';
+      break;
+    default:
+      $output = '<span class="label label-default pull-' . $pull . '">' . $role . '</span>';
+      break;
+  }
+  return $output;
+}
+
+function org_tabs($entity_id) {
+  $root = 'o/' . $entity_id ;
+  $class = ['btn', 'btn-sm', 'btn-block', 'btn-link'];
+  $output = '
+  <ul class="list-inline list-unstyled hidden-xs hidden-sm">
+    <li>' . l('Details', $root . '/view') . '</li>
+  </ul>
+  <div class="list-inline list-unstyled hidden-md hidden-lg">' .
+    l('Dashboard', $root . '/view', ['attributes' => ['class' => $class]]) .
+  '</div>';
+  return $output;
+}
+
+class NyTechOrgMembers {
+  public $member_ids;
+  public $members;
+  public $entity;
+
+  function __construct($entity) {
+    $this->entity = $entity;
+  }
+
+  public function go() {
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', 'membership')
+      ->entityCondition('bundle', 'standard')
+      ->fieldCondition('field_member_related_org', 'target_id', $this->entity->id, '=')
+      ->addMetaData('account', user_load(1));
+    $result = $query->execute();
+    if (isset($result['membership'])) {
+      $this->member_ids = array_keys($result['membership']);
+      $this->members = entity_load('membership', $this->member_ids);
+    }
+  }
+
+  public function output() {
+    $output = '';
+    foreach($this->members as $entity) {
+      $user = user_load($entity->uid);
+      $account = new NyTechAccount($user);
+      $role = $entity->field_member_role['und'][0]['value'];
+      $output .= '<div class="list-group-item"><span class="pull-right">' . l('X', current_path(), ['query' => ['message' => 'This feature is only an example.']]) . '</span>' . member_role($role) . ' ' . $account->name . '</div>';
+    }
+    $this->output = '<div class="list-group">' . $output . '</div>';
+  }
+}
+
+class NyTechOrgTags {
+  public $org_id;
+  public $category;
+  public $count;
+  public $objects;
+  public $array;
+
+  function __construct($org_id, $category) {
+    $this->count = 0;
+    if(!empty($org_id) && !empty($category)) {
+      $this->org_id = (int) $org_id;
+      $this->category = $category;
+      $this->objects();
+    }
+  }
+
+  public function objects() {
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', 'tag')
+      ->entityCondition('bundle', 'standard')
+      ->propertyCondition('status', 1, '=')
+      ->propertyCondition('org_id', $this->org_id, '=')
+      ->propertyCondition('category', $this->category, '=')
+      ->addMetaData('account', user_load(1));
+    $result = $query->execute();
+    if (isset($result['tag'])) {
+      $ids = array_keys($result['tag']);
+      $this->objects = entity_load('tag', $ids);
+      $this->count = count($ids);
+    }
+  }
+
+  public function set_array() {
+    $array = [];
+    if($this->count > 0) {
+      foreach($this->objects as $entity) {
+        $key = $this->cleanKey($entity->title);
+        $array[$key] = $entity->title;
+      }
+    }
+    $this->array = $array;
+  }
+
+  public function cleanKey($title) {
+    return htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
+  }
+}
+
+

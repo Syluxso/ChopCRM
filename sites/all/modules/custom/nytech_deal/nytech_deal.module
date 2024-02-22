@@ -1,0 +1,389 @@
+<?php
+module_load_include('inc', basename(__DIR__), basename(__DIR__) . '.vars');
+
+/**
+ * Implements hook_menu().
+ */
+function nytech_deal_menu() {
+  $items = [];
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('d/deals');
+  $item->title('Deals');
+  $item->page_callback('api_deals');
+  $item->access_callback(true);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('deals');
+  $item->title('deals');
+  $item->page_callback('screen_deals');
+  $item->access_callback('user_is_logged_in');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('deals/new');
+  $item->title('New Deal');
+  $item->page_callback('screen_deal_new');
+  $item->access_callback('user_is_logged_in');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('deals/state/%');
+  $item->title('Deal');
+  $item->page_callback('screen_deal_by_state');
+  $item->page_arguments([2]);
+  $item->access_callback('user_is_logged_in');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('deals/%/view');
+  $item->title('Deal');
+  $item->page_callback('screen_deal_view');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_deal_owner');
+  $item->access_arguments([1]);
+  $item->item($items);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('deals/%/update');
+  $item->title('Update Deal');
+  $item->page_callback('screen_deal_update');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_deal_owner');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('api/v1/deals/%/archive');
+  $item->title('Deal');
+  $item->page_callback('api_deal_archive');
+  $item->page_arguments([3]);
+  $item->access_callback('user_is_deal_owner');
+  $item->access_arguments([3]);
+  $items = $item->item($items);
+
+  return $items;
+}
+
+function nytech_deal_theme($existing, $type, $theme, $path) {
+  $theme = [];
+
+  $item = new NyTechTheme('nytech_deal_listed', __DIR__);
+  $theme = $item->item($theme);
+
+  $deal = new NyTechTheme('nytech_deal_view', __DIR__);
+  $theme = $deal->item($theme);
+
+  return $theme;
+}
+
+function nytech_deal_preprocess_page(&$variables) {
+  $current_path = current_path();
+  $path_array = explode('/', $current_path);
+
+  $match = new NyTechPathMatch($current_path);
+  $match->add_pattern('deals');
+  $match->add_pattern('deals/state/*');
+  $match->go();
+  if($match->has_match) {
+    $variables['action'] = l('<i class="fa fa-plus-circle"></i> Deal', 'deals/new', ['html' => true]);
+  }
+
+  $match = new NyTechPathMatch($current_path);
+  $match->add_pattern('deals/new');
+  $match->add_pattern('deals/*/view');
+  $match->add_pattern('deals/*/update');
+  $match->go();
+  if($match->has_match) {
+    $variables['title'] = '';
+  }
+}
+
+
+function nytech_deal_entity_presave($entity, $type) {
+
+}
+
+function user_is_deal_owner($entity_id) {
+  $access = false;
+  global $user;
+  $args = [
+    ':entity_id' => $entity_id,
+  ];
+  $query = 'SELECT e.* FROM {eck_deal} e WHERE e.id = :entity_id';
+  $q = db_query($query, $args);
+  $result = null;
+  foreach($q as $row) {
+    $result = $row->uid;
+  }
+  if($result == $user->uid) {
+    $access = true;
+  }
+  return $access;
+}
+
+class NyTechUsersDeals {
+  public $count;
+  public $limit;
+  public $total_value;
+  public $total_value_pretty;
+  public $objects;
+  public $user;
+  private $entity_type;
+  private $bundle;
+
+  function __construct($user, $limit = 25) {
+    $this->limit = $limit;
+    $this->user = $user;
+    $this->count = 0;
+    $this->entity_type = 'deal';
+    $this->bundle = 'standard';
+    $this->total_value = 0;
+  }
+
+  public function set_state($var) {
+    $this->state = $var;
+  }
+
+  public function query($limit = 25) {
+    if(!empty($this->state)) {
+      $query = new EntityFieldQuery();
+      $query->entityCondition('entity_type', $this->entity_type)
+        ->entityCondition('bundle', $this->bundle)
+        ->propertyOrderBy('created', 'DESC')
+        ->propertyCondition('status', 1, '=')
+        ->propertyCondition('uid', $this->user->uid, '=')
+        ->propertyCondition('state', $this->state, '=')
+        ->range(0, $limit)
+        ->addMetaData('account', user_load(1));
+
+      $result = $query->execute();
+      if (isset($result[$this->entity_type])) {
+        $ids = array_keys($result[$this->entity_type]);
+        $this->objects = entity_load($this->entity_type, $ids);
+        $this->count = count($this->objects);
+      }
+    } else {
+      $query = new EntityFieldQuery();
+      $query->entityCondition('entity_type', $this->entity_type)
+        ->entityCondition('bundle', $this->bundle)
+        ->propertyOrderBy('created', 'DESC')
+        ->propertyCondition('status', 1, '=')
+        ->propertyCondition('uid', $this->user->uid, '=')
+        ->range(0, $limit)
+        ->addMetaData('account', user_load(1));
+
+      $result = $query->execute();
+      if (isset($result[$this->entity_type])) {
+        $ids = array_keys($result[$this->entity_type]);
+        $this->objects = entity_load($this->entity_type, $ids);
+        $this->count = count($this->objects);
+      }
+    }
+    $this->set_total_value();
+  }
+
+  private function set_total_value() {
+    if(!empty($this->objects)) {
+      $array = [];
+      foreach($this->objects as $entity) {
+        $array[] = $entity->value;
+      }
+      $this->total_value = array_sum($array);
+      $this->total_value_pretty = '$' . number_format($this->total_value, 0, '.', ',');
+    }
+  }
+}
+
+
+class NyTechDeal {
+  public $uuid;
+  public $entity_id;
+
+  public $title;
+  public $value;
+  public $value_pretty;
+  public $state;
+  public $state_output;
+
+  public $created;
+  public $created_pretty;
+  public $created_time_ago;
+
+  public $changed;
+  public $changed_pretty;
+  public $changed_time_ago;
+
+  public $archive_url;
+  public $view_url;
+  public $update_url;
+
+  public $user_id;
+  public $author;
+
+  function __construct($entity) {
+    $this->entity_id = $entity->id;
+    $this->user_id   = (int) $entity->uid;
+    $this->uuid      = $entity->uuid;
+    $this->title     = $entity->title;
+
+    $this->set_value($entity);
+    $this->set_state($entity);
+    $this->set_date($entity);
+    $this->set_urls($entity);
+  }
+
+  private function set_value($entity) {
+    $this->value = (int) $entity->value;
+    $this->value_pretty = '$' . number_format($this->value, 0, '.', ',');
+  }
+
+  private function set_state($entity) {
+    $this->state = $entity->state;
+    switch ($this->state) {
+      case 'Cold':
+        $output = '<span class="label label-default"><i class="fa-regular fa-snowflake"></i> ' . $this->state . '</span>';
+        break;
+      case 'Qualifying':
+        $output = '<span class="label label-info"><i class="fa-solid fa-person-circle-question"></i> ' . $this->state . '</span>';
+        break;
+      case 'Won':
+        $output = '<span class="label label-success"><i class="fa-solid fa-trophy"></i> ' . $this->state . '</span>';
+        break;
+      case 'Lost':
+        $output = '<span class="label label-danger"><i class="fa-regular fa-times-circle"></i> ' . $this->state . '</span>';
+        break;
+      default:
+        $output = '<span class="label label-default"><i class="fa-regular fa-question"></i> ' . $this->state . '</span>';
+        break;
+    }
+    $this->state_output = $output;
+  }
+
+  private function set_date($entity) {
+    $this->created          = (int) $entity->created;
+    $this->created_pretty   = date('M d Y, g:ia', $this->created);
+    $this->created_time_ago = timeAgo($this->created);
+
+    $this->changed          = (int) $entity->changed;
+    $this->changed_pretty   = date('M d Y, g:ia', $this->changed);
+    $this->changed_time_ago = timeAgo($this->changed);
+  }
+
+  private function set_urls($entity) {
+    $this->view_url    = drupal_get_path_alias('deals/' . $this->entity_id . '/view');
+    $this->update_url  = drupal_get_path_alias('deals/' . $this->entity_id . '/update');
+    $this->archive_url = drupal_get_path_alias('api/v1/deals/' . $this->entity_id . '/archive');
+  }
+
+  public function author($entity) {
+    $author       = user_load($entity->uid);
+    $this->author = new NyTechAccount($author);
+  }
+
+}
+
+
+class NyTechDealCreate {
+  public $entity_id;
+  public $entity;
+
+  function __construct($values) {
+    $edit = [
+      'type' => 'standard',
+      'status' => 1,
+      'uid' => $values['user_id'],
+      'title' => $values['title'],
+      'value' => $values['value'],
+      'state' => get_deal_state_title_by_entity_id($values['state']),
+    ];
+    $entity = entity_create('deal', $edit);
+    entity_save('deal', $entity);
+    $this->entity = $entity;
+    $this->entity_id = $entity->id;
+  }
+}
+
+class NyTechDealUpdate {
+  public $entity_id;
+  public $entity;
+  public $title;
+  public $total;
+
+  function __construct($values) {
+    /*
+     * Query the state for an entity. If "false" then set it to a static title.
+     */
+    $state = get_deal_state_title_by_entity_id($values['state']);
+    if($state == false) {
+      $state = $values['state'];
+    }
+    $entity          = entity_load_single('deal', $values['entity_id']);
+    $entity->title   = $values['title'];
+    $entity->value   = $values['value'];
+    $entity->state   = $state;
+    entity_save('deal', $entity);
+
+    $this->entity    = $entity;
+    $this->entity_id = $entity->id;
+  }
+}
+
+class NyTechDealsListed {
+  public $count;
+  public $objects;
+  public $output;
+
+  function __construct($objects) {
+    $this->count = 0;
+    if(!empty($objects)) {
+      $this->objects = $objects;
+      $this->count = count($this->objects);
+    }
+    $this->output();
+  }
+
+  private function output() {
+    global $base_url;
+    $output = '<h5 class="Deal-count"><span class="badge">' . $this->count . ' deals</span></h5>';
+    if(!empty($this->objects)) {
+      foreach($this->objects as $entity) {
+        $image = $this->get_image($entity);
+        $array = [
+          'url'    => $base_url . '/' . drupal_get_path_alias('deals/' . $entity->id . '/view'),
+          'date'   => date('M d Y, g:ia', $entity->created),
+          'title'  => $entity->title,
+          'entity' => $entity,
+        ];
+        $output .= theme('nytech_deal_listed', $array);
+      }
+    } else {
+      $output = '<div class="no-items-found">No deals</deals></div>';
+    }
+    $this->output = '<div class="deal-results"><div class="list-group">' . $output . '</div></div>';
+  }
+}
+
+function get_deal_state_title_by_entity_id($entity_id) {
+  $query = 'SELECT e.title, e.id FROM {eck_deal_state} e WHERE e.id = :entity_id';
+  $args = [
+    ':entity_id' => $entity_id,
+  ];
+  $q = db_query($query, $args);
+  foreach($q as $row) {
+    return $row->title;
+  }
+  return false;
+}
+
+function deal_tabs() {
+  $deal_states = new NyTecDealStages();
+  $array = [];
+  $class = ['btn', 'btn-xs', 'btn-default',];
+  foreach($deal_states->objects as $entity) {
+    $array[] = l($entity->title, 'deals/state/' . strtolower($entity->title));
+  }
+  return implode(' | ', $array);
+}

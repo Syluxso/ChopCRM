@@ -1,0 +1,346 @@
+<?php
+module_load_include('inc', basename(__DIR__), basename(__DIR__) . '.vars');
+
+/**
+ * Implements hook_menu().
+ */
+function nytech_note_menu() {
+  $items = [];
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('n/notes');
+  $item->title('Notes');
+  $item->page_callback('api_note');
+  $item->access_callback(true);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('notes');
+  $item->title('Notes');
+  $item->page_callback('screen_o_notes');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('notes/new');
+  $item->title('Create Note');
+  $item->page_callback('screen_note_new');
+  $item->access_callback('user_is_logged_in');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('notes/%/view');
+  $item->title('Note');
+  $item->page_callback('screen_note_view');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_note_author');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('notes/%/update');
+  $item->title('Note');
+  $item->page_callback('screen_o_job_note_update');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_note_author');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('api/v1/notes/%/archive');
+  $item->title('Note');
+  $item->page_callback('api_note_archive');
+  $item->page_arguments([3]);
+  $item->access_callback('user_is_note_author');
+  $item->access_arguments([3]);
+  $items = $item->item($items);
+
+  return $items;
+}
+
+function user_is_note_author($entity_id) {
+  $entity_type = 'note';
+  return user_is_entity_author($entity_type, $entity_id);
+}
+
+function nytech_note_theme($existing, $type, $theme, $path) {
+  $theme = [];
+
+  $item = new NyTechTheme('nytech_note_listed', __DIR__);
+  $theme = $item->item($theme);
+
+  $item = new NyTechTheme('nytech_note_view', __DIR__);
+  $theme = $item->item($theme);
+
+  return $theme;
+}
+
+function nytech_note_preprocess_page(&$variables) {
+  $current_path = current_path();
+
+  $match = new NyTechPathMatch($current_path);
+  $match->add_pattern('notes/new');
+  $match->go();
+  if($match->has_match) {
+    $variables['back'] = l('<i class="fa fa-chevron-left"></i> Back', 'notes', ['html' => true]);
+  }
+}
+
+
+function nytech_note_entity_presave($entity, $type) {
+  /*
+   * If the field_related_deliverable is set then infer the related account.
+   * If field_related_deliverable is not set then it is a generic 'to do' and we let it be.
+   */
+  if(!empty($entity->field_related_deliverable)) {
+    $entity->field_related_account['und'][0]['target_id'] = $entity->field_related_deliverable['und'][0]['target_id'];
+  }
+}
+
+class NyTechUsersNotes {
+  public $count;
+  public $limit;
+  public $objects;
+  public $user;
+  private $entity_type;
+  private $bundle;
+
+  function __construct($user, $limit = 25) {
+    $this->limit = $limit;
+    $this->user = $user;
+    $this->count = 0;
+    $this->entity_type = 'note';
+    $this->bundle = 'standard';
+  }
+
+  public function set_state($var) {
+    $this->state = $var;
+  }
+
+  public function query($limit = 25) {
+    if(!empty($this->state)) {
+      $query = new EntityFieldQuery();
+      $query->entityCondition('entity_type', $this->entity_type)
+        ->entityCondition('bundle', $this->bundle)
+        ->propertyOrderBy('created', 'DESC')
+        ->propertyCondition('status', 1, '=')
+        ->propertyCondition('uid', $this->user->uid, '=')
+        ->propertyCondition('state', $this->state, '=')
+        ->range(0, $limit)
+        ->addMetaData('account', user_load(1));
+
+      $result = $query->execute();
+      if (isset($result[$this->entity_type])) {
+        $ids = array_keys($result[$this->entity_type]);
+        $this->objects = entity_load($this->entity_type, $ids);
+        $this->count = count($this->objects);
+      }
+    } else {
+      $query = new EntityFieldQuery();
+      $query->entityCondition('entity_type', $this->entity_type)
+        ->entityCondition('bundle', $this->bundle)
+        ->propertyOrderBy('created', 'DESC')
+        ->propertyCondition('status', 1, '=')
+        ->propertyCondition('uid', $this->user->uid, '=')
+        ->range(0, $limit)
+        ->addMetaData('account', user_load(1));
+
+      $result = $query->execute();
+      if (isset($result[$this->entity_type])) {
+        $ids = array_keys($result[$this->entity_type]);
+        $this->objects = entity_load($this->entity_type, $ids);
+        $this->count = count($this->objects);
+      }
+    }
+  }
+}
+
+class NyTechNote {
+  public $uuid;
+  public $entity_id;
+
+  public $title;
+  public $state;
+  public $state_output;
+  public $details;
+  public $details_short;
+
+  public $created;
+  public $created_pretty;
+  public $created_time_ago;
+
+  public $changed;
+  public $changed_pretty;
+  public $changed_time_ago;
+
+  public $archive_url;
+  public $view_url;
+  public $update_url;
+
+  public $user_id;
+  public $author;
+
+  function __construct($entity) {
+    $this->entity_id = $entity->id;
+    $this->user_id   = (int) $entity->uid;
+    $this->uuid      = $entity->uuid;
+    $this->title     = $entity->title;
+
+    $this->set_state($entity);
+    $this->set_date($entity);
+    $this->set_details($entity);
+    $this->set_urls();
+  }
+
+  private function set_details($entity) {
+    if(!empty($entity->field_note_details)) {
+      $this->details       = $entity->field_note_details['und'][0]['value'];
+      $this->details_short = shorten($this->details, 140);
+    }
+  }
+
+  private function set_state($entity) {
+    $this->state = $entity->state;
+    switch ($this->state) {
+      case 'New':
+        $output = '<span class="label label-default"><i class="fa-solid fa-circle-info"></i> ' . $this->state . '</span>';
+        break;
+      case 'Doing':
+        $output = '<span class="label label-info"><i class="fa-solid fa-circle-check"></i> ' . $this->state . '</span>';
+        break;
+      case 'Done':
+        $output = '<span class="label label-success"><i class="fa-solid fa-thumbs-up"></i> ' . $this->state . '</span>';
+        break;
+      case 'Completed':
+        $output = '<span class="label label-danger"><i class="fa-solid fa-thumbs-up"></i> ' . $this->state . '</span>';
+        break;
+      default:
+        $output = '<span class="label label-default"><i class="fa-regular fa-question"></i> ' . $this->state . '</span>';
+        break;
+    }
+    $this->state_output = $output;
+  }
+
+  private function set_date($entity) {
+    $this->created          = (int) $entity->created;
+    $this->created_pretty   = date('M d Y, g:ia', $this->created);
+    $this->created_time_ago = timeAgo($this->created);
+
+    $this->changed          = (int) $entity->changed;
+    $this->changed_pretty   = date('M d Y, g:ia', $this->changed);
+    $this->changed_time_ago = timeAgo($this->changed);
+  }
+
+  private function set_urls() {
+    $this->view_url    = drupal_get_path_alias('notes/' . $this->entity_id . '/view');
+    $this->update_url  = drupal_get_path_alias('notes/' . $this->entity_id . '/update');
+    $this->archive_url = drupal_get_path_alias('api/v1/notes/' . $this->entity_id . '/archive');
+  }
+
+  public function author($entity) {
+    $author       = user_load($entity->uid);
+    $this->author = new NyTechAccount($author);
+  }
+
+}
+
+class NyTechNoteCreate {
+  public $entity_id;
+  public $entity;
+  public $entity_type = 'note';
+
+  function __construct($values) {
+    global $user;
+    $edit = [
+      'type' => 'standard',
+      'status' => 1,
+      'uid' => $user->uid,
+      'title' => $values['title'],
+    ];
+    $entity = entity_create('deal', $edit);
+    $entity->field_note_details['und'][0]['value'] = $values['value'];
+    entity_save('note', $entity);
+    $this->entity = $entity;
+    $this->entity_id = $entity->id;
+  }
+}
+
+class NyTechNoteUpdate {
+  public $entity_id;
+  public $entity;
+
+  function __construct($values) {
+    $entity = entity_load_single('note', $values['entity_id']);
+    $entity->title = shorten($values['message']);
+    $entity->field_n_message['und'][0]['value'] = $values['message'];
+    entity_save('note', $entity);
+    $this->entity = $entity;
+    $this->entity_id = $entity->id;
+  }
+}
+
+class NyTechNotesListed {
+  public $count;
+  public $org_id;
+  public $job_id;
+  public $objects;
+  public $output;
+
+  function __construct($org_id, $job_id, $objects) {
+    $this->org_id = $org_id;
+    $this->job_id = $job_id;
+    $this->count = 0;
+    if(!empty($objects)) {
+      $this->objects = $objects;
+      $this->count = count($this->objects);
+    }
+    $this->output();
+  }
+
+  private function output() {
+    global $base_url;
+    $output = '<h5 class="item-count">' . $this->count . ' Notes</h5>';
+    if(!empty($this->objects)) {
+      foreach($this->objects as $entity) {
+        $array = [
+          'url' => $base_url . '/' . drupal_get_path_alias('o/' . $this->org_id . '/jobs/' . $this->job_id . '/notes/' . $entity->id . '/view'),
+          'org_id' => $this->org_id,
+          'job_id' => $this->job_id,
+          'short' => $entity->title,
+          'time_ago' => timeAgo($entity->created),
+          'entity' => $entity,
+        ];
+        $output .= theme('nytech_note_listed', $array);
+      }
+    } else {
+      $output = '<div class="no-items-found">Write a note!</div>';
+    }
+    $this->output = '<div class="item-results"><div class="list-group">' . $output . '</div></div>';
+  }
+
+
+}
+
+function get_note_state_title_by_entity_id($entity_id) {
+  $query = 'SELECT e.title, e.id FROM {eck_todo_state} e WHERE e.id = :entity_id';
+  $args = [
+    ':entity_id' => $entity_id,
+  ];
+  $q = db_query($query, $args);
+  foreach($q as $row) {
+    return $row->title;
+  }
+  return false;
+}
+
+function deal_tabs() {
+  $deal_states = new NyTecDealStages();
+  $array = [];
+  $class = ['btn', 'btn-xs', 'btn-default',];
+  foreach($deal_states->objects as $entity) {
+    $array[] = l($entity->title, 'deals/state/' . strtolower($entity->title));
+  }
+  return implode(' | ', $array);
+}

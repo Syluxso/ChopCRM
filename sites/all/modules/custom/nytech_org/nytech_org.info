@@ -1,0 +1,6 @@
+name = NyTech Org
+description = Nyberg Technology Organization Module.
+core = 7.x
+package = NyTech
+
+files[] = nytech_org.module

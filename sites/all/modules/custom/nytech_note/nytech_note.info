@@ -1,0 +1,6 @@
+name = NyTech Job
+description = Nyberg Technology Note Module.
+core = 7.x
+package = NyTech
+
+files[] = nytech_note.module

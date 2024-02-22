@@ -1,0 +1,85 @@
+<?php
+module_load_include('inc', basename(__DIR__), basename(__DIR__) . '.vars');
+
+/**
+ * Implements hook_menu().
+ */
+function nytech_report_menu() {
+  $items = [];
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('reports/kpi/default');
+  $item->title('Report');
+  $item->page_callback('screen_reports_kpi_default');
+  $item->access_callback(true);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('api/v1/reports/kpi/default');
+  $item->title('Asset');
+  $item->page_callback('api_reports_kpi_default');
+  $item->access_callback(true);
+  $item->json_output();
+  $items = $item->item($items);
+
+  return $items;
+}
+
+function user_can_view_report($uuid) {
+  $access = false;
+  // $entity = entity_uuid_load('asset', $uuid);
+
+  return true;
+}
+
+function nytech_report_theme($existing, $type, $theme, $path) {
+  $theme = [];
+
+  $item = new NyTechTheme('nytech_report_master', __DIR__);
+  $theme = $item->item($theme);
+
+  return $theme;
+}
+
+function nytech_report_preprocess_page(&$variables) {
+
+}
+
+
+function nytech_report_entity_presave($entity, $type) {
+
+}
+
+class NyTechReportView {
+  public $output;
+
+  function __construct($entity) {
+    $this->entity = $entity;
+  }
+
+  public function go() {
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', 'asset')
+      ->entityCondition('bundle', 'standard')
+      ->fieldCondition('field_related_org', 'target_id', $this->org_id, '=')
+      ->addMetaData('account', user_load(1));
+
+    $result = $query->execute();
+    if (isset($result['asset'])) {
+      $ids = array_keys($result['asset']);
+      $this->objects = entity_load('asset', $ids);
+    }
+  }
+
+  public function output() {
+    $output = '';
+    if(!empty($this->objects)) {
+      foreach($this->objects as $entity) {
+        $output .= l($entity->title, 'assets/' . $entity->id . '/view', ['html' => true, 'attributes' => ['class' => ['list-group-item']]]);
+      }
+    } else {
+      $output = 'Create your first asset ' . l('+ Asset', 'o/' . $this->org_id . '/assets/new', ['attributes' => ['class' => ['btn', 'btn-sm', 'btn-primary']]]);
+    }
+    $this->output = $output;
+  }
+}

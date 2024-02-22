@@ -1,0 +1,175 @@
+<?php
+module_load_include('inc', basename(__DIR__), basename(__DIR__) . '.vars');
+
+/**
+ * Implements hook_menu().
+ */
+function nytech_notification_menu() {
+  $items = [];
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('notifications');
+  $item->title('Notifications');
+  $item->page_callback('screen_my_notifications');
+  $item->access_callback('user_is_logged_in');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('api/v1/notifications/test-new');
+  $item->title('Notifications');
+  $item->page_callback('api_notifications_test_new');
+  $item->access_callback(true);
+  $item->json_output();
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('api/v1/notifications/%/delete');
+  $item->title('Notifications');
+  $item->page_callback('api_notifications_delete');
+  $item->page_arguments([3]);
+  $item->access_callback('user_is_notification_owner');
+  $item->access_arguments([3]);
+  $items = $item->item($items);
+
+  return $items;
+}
+
+function user_is_notification_owner($entity_id) {
+  $access = false;
+  global $user;
+  $entity = entity_load_single('notification', $entity_id);
+  if($user->uid == $entity->uid) {
+    $access = true;
+  }
+  return $access;
+}
+
+function nytech_notification_theme($existing, $type, $theme, $path) {
+  $theme = [];
+
+  $item = new NyTechTheme('nytech_notification_listed', __DIR__);
+  $theme = $item->item($theme);
+
+  return $theme;
+}
+
+
+
+
+function nytech_notification_preprocess_page(&$variables) {
+
+}
+
+
+function nytech_notification_entity_presave($entity, $type) {
+
+}
+
+class NyTechUserNotifications {
+  public $count;
+  public $objects;
+  public $user;
+  public $output;
+
+  function __construct($user) {
+    $this->user = $user;
+    $this->count = 0;
+  }
+
+  public function query() {
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', 'notification')
+      ->entityCondition('bundle', 'standard')
+      ->propertyCondition('uid', $this->user->user_id, '=')
+      ->propertyOrderBy('created', 'DESC')
+      ->addMetaData('account', user_load(1));
+
+    $result = $query->execute();
+    if (isset($result['notification'])) {
+      $ids = array_keys($result['notification']);
+      $this->objects = entity_load('notification', $ids);
+      $this->count = count($this->objects);
+    }
+  }
+}
+
+class NyTechNotification {
+
+  public $created;
+  public $created_pretty;
+  public $created_time_ago;
+  public $level_id;
+  public $level;
+  public $title;
+  public $message;
+  public $status;
+  public $delete_url;
+  public $user_id;
+
+  function __construct($entity) {
+    $this->user_id = (int) $entity->uid;
+    $this->status = (int) $entity->status;
+    $this->title = $entity->title;
+
+    $this->set_date($entity);
+    $this->set_level($entity);
+    $this->set_message($entity);
+    $this->set_delete_url($entity);
+
+  }
+
+  private function set_date($entity) {
+    $this->created = (int) $entity->created;
+    $this->created_pretty = date('g:ia - m-d-Y', $this->created);
+    $this->created_time_ago = timeAgo($this->created);
+  }
+
+  private function set_level($entity) {
+    $this->level_id = (int) $entity->level;
+    switch ($this->level_id) {
+      case '1':
+        $output = '<span class="label label-danger">Urgent</span>';
+        break;
+      case '2':
+        $output = '<span class="label label-primary">Notice</span>';
+        break;
+      case '0':
+        $output = '';
+        break;
+      default:
+        $output = '';
+        break;
+    }
+    $this->level = $output;
+  }
+
+  private function set_message($entity) {
+    $message = '';
+    if(!empty($entity->field_note_message)) {
+      $message = $entity->field_note_message['und'][0]['value'];
+    }
+    $this->message = $message;
+  }
+
+  private function set_delete_url($entity) {
+    $this->delete_url = drupal_get_path_alias('api/v1/notifications/' . $entity->id . '/delete');
+  }
+
+}
+
+
+class NyTechNotificationCreate {
+  function __construct($user_id = 1, $title =  'Notification', $message = 'Test test test, 1 2 3, is this thing on?', $level = 0) {
+    $edit = [
+      'type' => 'standard',
+      'title' => $title,
+      'status' => 1,
+      'level' => $level,
+      'uid' => $user_id,
+    ];
+    $entity = entity_create('notification', $edit);
+    $entity->field_note_message['und'][0]['value'] = $message;
+    $this->entity = $entity;
+    entity_save('notification', $entity);
+  }
+}

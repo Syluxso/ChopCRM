@@ -7,7 +7,7 @@
   },
   "servers": [
   {
-    "url": "https://github.com/Syluxso/ChopCRM/blob/master/docs/docs.yml"
+    "url": "https://dev-chopcrm.pantheon.io"
   }
   ],
   "paths": {
@@ -16,13 +16,21 @@
         "summary": "Create or Validate a Session ID (sid).",
         "responses": {
           "200": {
-            "description": "Basic auth or sid validation was successfull.",
+            "description": "Basic auth or sid validation was successful.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/User"
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "type": "object"
+                    }
                   }
                 }
               }
@@ -33,22 +41,16 @@
     }
   },
   "components": {
-    "schemas": {
-      "User": {
-        "type": "object",
-        "properties": {
-          "user_id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "username": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string"
-          }
-        }
+    "securitySchemes": {
+      "basicAuth": {
+        "type": "http",
+        "scheme": "basic"
       }
     }
-  }
+  },
+  "security": [
+    {
+      "basicAuth": []
+    }
+  ]
 }

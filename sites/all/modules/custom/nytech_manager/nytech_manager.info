@@ -1,0 +1,6 @@
+name = NyTech Manager
+description = Nyberg Technology Manager module.
+core = 7.x
+package = NyTech
+
+files[] = nytech_manager.module

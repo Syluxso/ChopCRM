@@ -1,0 +1,6 @@
+name = NyTech Master
+description = Nyberg Technology master default module.
+core = 7.x
+package = NyTech
+
+files[] = nytech_master.module

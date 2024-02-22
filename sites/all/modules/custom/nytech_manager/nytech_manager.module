@@ -1,0 +1,89 @@
+<?php
+module_load_include('inc', 'nytech_manager', 'nytech_manager.classes');
+
+/**
+ * Implements hook_menu().
+ */
+function nytech_manager_menu() {
+
+  $items['endpoints/%/list'] = array(
+    'title' => 'Manager',
+    'page callback' => 'screen_id_endpoints_list',
+    'page arguments' => [1],
+    'access callback' => 'user_is_logged_in',
+    'file' => 'nytech_manager.pages.inc',
+    'file path' => drupal_get_path('module', 'nytech_manager'),
+  );
+
+  return $items;
+}
+
+function nytech_manager_preprocess(&$variables, $hook) {
+  if(isset($variables['elements']['#entity_type'])) { // or maybe check for $hook name
+    if($variables['elements']['#entity_type'] == 'endpoint') {
+      $function = __FUNCTION__ . '_' . $variables['elements']['#entity_type'];
+      if (function_exists($function)) {
+        $function($variables, $hook);
+      }
+    }
+  }
+}
+
+function nytech_manager_preprocess_endpoint(&$variables) {
+//  $variables['content']['ping'] = array(
+//    '#markup' => '',
+//    '#weight' => 10, // Adjust the weight as per your requirements.
+//  );
+}
+
+function nytech_manager_preprocess_entity_view(&$variables) {
+  var_dump($variables);
+  if ($variables['type'] == 'endpoint') {
+    // Add your custom text to the entity's content.
+    $custom_text = '<p>Hello World</p>';
+    $variables['content']['custom_text'] = array(
+      '#markup' => $custom_text,
+      '#weight' => 10, // Adjust the weight as per your requirements.
+    );
+  }
+}
+
+function nytech_manager_form_alter(&$form, &$form_state, $form_id) {
+  global $base_path;
+  if ($form_id == 'views_exposed_form' && !empty($form['#id']) && $form['#id'] == 'views-exposed-form-endpoints-default') {
+    $form['#action'] = $base_path . current_path();
+  }
+}
+
+function nytech_manager_views_pre_view(&$view, &$display_id, &$args) {
+}
+
+function is_manager() {
+  $access = false;
+  global $user;
+  if(in_array('manager', $user->roles)) {
+    $access = true;
+  }
+
+  // We are implementing an X role or higher method here.
+  if(in_array('administrator', $user->roles)) {
+    $access = true;
+  }
+
+  return $access;
+}
+
+function nytech_manager_entity_presave($entity, $type) {
+  if($type == 'example') {
+
+  }
+}
+
+
+function nytech_manager_preprocess_views_view_fields(&$variables) {
+  if ($variables['view']->name == 'manager_listings') {
+    $status = $variables['fields']['status']->raw;
+    $variables['fields']['status']->content = status_pretty($status);
+  }
+
+}

@@ -1,0 +1,5 @@
+name = NyTech Form API
+description = Create form api for class based forms.
+core = 7.x
+package = NyTech
+files[] = nytech_form.module

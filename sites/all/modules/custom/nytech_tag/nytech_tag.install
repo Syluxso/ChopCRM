@@ -1,0 +1,159 @@
+<?php
+
+/**
+ * Implements hook_schema().
+ *
+ * @ingroup entity_example
+ */
+function nytech_tag_schema() {
+  $schema = array();
+
+  /*
+   * NyTech Tag Entity
+   */
+  $schema['nytech_tag_config'] = array(
+    'description' => 'The users tags.',
+    'fields' => array(
+      'id' => array(
+        'description' => 'Primary key of the tag config entity.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'The tag config bundle',
+        'type' => 'text',
+        'size' => 'medium',
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'The id of the owner/author of the tag Config.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'description' => 'The unix time of the creation of this tag config',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'uuid' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'UUID',
+      ),
+      'data' => array(
+        'mysql_type' => 'blob',
+        'description' => 'The list of Tags used for the user.',
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+
+  /*
+   * NyTech Tag Entity
+   */
+  $schema['nytech_tag'] = array(
+    'description' => 'The user entered tags.',
+    'fields' => array(
+      'id' => array(
+        'description' => 'Primary key of the tag entity.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'The tag bundle',
+        'type' => 'text',
+        'size' => 'medium',
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'The id of the owner/author of the tag.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'description' => 'The unix time of the creation of this tag',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'uuid' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'UUID',
+      ),
+      'title' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The title of the NyTech Tag entity.',
+      ),
+      'filter' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The filter (category) of the NyTech Tag entity.',
+      ),
+      'status' => array(
+        'description' => 'The status of this tag.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+
+  return $schema;
+}
+
+function nytech_tag_enable() {
+
+	// tag_image
+	if (!field_info_field('tag_image')) {
+
+		// Create the field base.
+		$field = array(
+			'field_name' => 'tag_image',
+			'type' => 'image',
+		);
+		field_create_field($field);
+
+		// Create the field instance on the bundle.
+		$instance = array(
+			'field_name' => 'tag_image',
+			'entity_type' => 'nytech_tag',
+			'label' => 'Image',
+			'bundle' => 'tag',
+			'widget' => array(
+				'type' => 'image',
+			),
+		);
+		field_create_instance($instance);
+	}
+
+
+}
+
+
+/**
+ * Implements hook_uninstall().
+ *
+ * At uninstall time we'll notify field.module that the entity was deleted
+ * so that attached fields can be cleaned up.
+ *
+ * @ingroup entity_example
+ */
+function nytech_tag_uninstall() {
+  field_attach_delete_bundle('nytech_tag', 'standard');
+}

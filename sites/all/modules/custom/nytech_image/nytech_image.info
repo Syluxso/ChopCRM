@@ -1,0 +1,6 @@
+name = NyTech Image
+description = Nyberg Technology Image Module.
+core = 7.x
+package = NyTech
+
+files[] = nytech_image.module

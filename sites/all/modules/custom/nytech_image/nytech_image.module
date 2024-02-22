@@ -1,0 +1,427 @@
+<?php
+module_load_include('inc', basename(__DIR__), basename(__DIR__) . '.vars');
+
+/**
+ * Implements hook_menu().
+ */
+function nytech_image_menu() {
+  $items = [];
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('images');
+  $item->title('Image');
+  $item->page_callback('api_image');
+  $item->access_callback(true);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/images');
+  $item->title('Images');
+  $item->page_callback('screen_o_images');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/jobs/%/images/new');
+  $item->title('Create Image');
+  $item->page_callback('screen_o_job_image_new');
+  $item->page_arguments([1,3]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/jobs/%/images');
+  $item->title('Job Images');
+  $item->page_callback('screen_o_job_images');
+  $item->page_arguments([1,3]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1,3]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/jobs/%/images/%/view');
+  $item->title('Image');
+  $item->page_callback('screen_o_job_image_view');
+  $item->page_arguments([1,3,5]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/jobs/%/images/%/update');
+  $item->title('Image');
+  $item->page_callback('screen_o_job_image_update');
+  $item->page_arguments([1,3,5]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('api/v1/images/%/delete');
+  $item->title('Image');
+  $item->page_callback('api_image_delete');
+  $item->page_arguments([3]);
+  $item->access_callback('user_can_access_image');
+  $item->access_arguments([3]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('images/new');
+  $item->title('New Image');
+  $item->page_callback('screen_image_global_new');
+  $item->access_callback(true);
+  $items = $item->item($items);
+
+  return $items;
+}
+
+function nytech_image_theme($existing, $type, $theme, $path) {
+  $theme = [];
+
+  $item = new NyTechTheme('nytech_image_listed', __DIR__);
+  $theme = $item->item($theme);
+
+  $item = new NyTechTheme('nytech_image_view', __DIR__);
+  $theme = $item->item($theme);
+
+  return $theme;
+}
+
+function nytech_image_preprocess_page(&$variables) {
+  $current_path = current_path();
+  $path_array = explode('/', $current_path);
+
+  $match = new NyTechPathMatch($current_path);
+  $match->add_pattern('o/*/jobs/*/images/new');
+  $match->go();
+  if($match->has_match) {
+    $org_id = $path_array[1];
+    $job_id = $path_array[3];
+    $variables['back'] = l('<i class="fa fa-chevron-left"></i> Back', 'o/' . $org_id . '/jobs/' . $job_id . '/images', ['html' => true]);
+    $variables['title'] = '';
+  }
+
+  $match = new NyTechPathMatch($current_path);
+  $match->add_pattern('o/*/jobs/*/images');
+  $match->go();
+  if($match->has_match) {
+    $org_id = $path_array[1];
+    $variables['back'] = l('<i class="fa fa-chevron-left"></i> ' . JOBS, 'o/' . $org_id . '/jobs', ['html' => true]);
+    $variables['title'] = '';
+  }
+
+  $match = new NyTechPathMatch($current_path);
+  $match->add_pattern('o/*/jobs/*/images/*/view');
+  $match->go();
+  if($match->has_match) {
+    $variables['title'] = '';
+  }
+
+  $match = new NyTechPathMatch($current_path);
+  $match->add_pattern('o/*/jobs/*/images/*/view');
+  $match->go();
+  if($match->has_match) {
+    $variables['title'] = '';
+  }
+}
+
+
+function nytech_image_entity_presave($entity, $type) {
+
+}
+
+function user_can_access_image($entity_id) {
+  $entity = entity_load_single('image', $entity_id);
+  return user_is_org_member($entity->field_img_related_org['und'][0]['target_id']);
+}
+
+class NyTechOrgImages {
+  public $org_id;
+  public $count;
+  public $objects;
+  public $user;
+
+  function __construct($entity_id) {
+    $this->org_id = $entity_id;
+    $this->count = 0;
+  }
+
+  public function query() {
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', 'image')
+      ->entityCondition('bundle', 'standard')
+      ->propertyOrderBy('created', 'DESC')
+      ->propertyCondition('status', 1, '=')
+      ->fieldCondition('field_img_related_org', 'target_id', $this->org_id, '=')
+      ->addMetaData('account', user_load(1));
+
+    $result = $query->execute();
+    if (isset($result['image'])) {
+      $ids = array_keys($result['image']);
+      $this->objects = entity_load('image', $ids);
+      $this->count = count($this->objects);
+    }
+  }
+}
+
+class NyTechJobImages {
+  public $org_id;
+  public $job_id;
+  public $count;
+  public $objects;
+  public $output;
+
+  function __construct($org_id, $job_id) {
+    $this->org_id = (int) $org_id;
+    $this->job_id = (int) $job_id;
+    $this->count = 0;
+  }
+
+  public function query($limit = 25) {
+    if(!empty($this->org_id) && !empty($this->job_id)) {
+      $query = new EntityFieldQuery();
+      $query->entityCondition('entity_type', 'image')
+        ->entityCondition('bundle', 'standard')
+        ->propertyOrderBy('created', 'DESC')
+        ->propertyCondition('status', 1, '=')
+        ->fieldCondition('field_img_related_org', 'target_id', $this->org_id, '=')
+        ->fieldCondition('field_img_related_job', 'target_id', $this->job_id, '=')
+        ->range(0, $limit)
+        ->addMetaData('account', user_load(1));
+
+      $result = $query->execute();
+      if (isset($result['image'])) {
+        $ids = array_keys($result['image']);
+        $this->objects = entity_load('image', $ids);
+        $this->count = count($this->objects);
+      }
+    }
+  }
+}
+
+
+class NyTechImage {
+  public $uuid;
+  public $entity_id;
+
+  public $created;
+  public $created_pretty;
+  public $created_time_ago;
+
+  public $changed;
+  public $changed_pretty;
+  public $changed_time_ago;
+
+  public $delete_url;
+  public $view_url;
+  public $job_url;
+
+  public $user_id;
+  public $org_id;
+  public $job_images_url;
+
+  public $author;
+
+  public $title;
+  public $memo;
+  public $image_url;
+  public $image_output;
+  public $image_output_thumbnail;
+  public $fids;
+
+  public $mime_type;
+  public $file_size;
+
+  function __construct($entity) {
+    $this->entity_id = $entity->id;
+    $this->user_id = (int) $entity->uid;
+    $this->uuid = $entity->uuid;
+    $this->title = $entity->title;
+
+    $this->set_author($entity);
+    $this->set_org_id($entity);
+    $this->set_job_id($entity);
+    $this->set_date($entity);
+    $this->set_urls($entity);
+    $this->set_memo($entity);
+    $this->set_image($entity);
+  }
+
+  private function set_date($entity) {
+    $this->created = (int) $entity->created;
+    $this->created_pretty = date('M d Y, g:ia', $this->created);
+    $this->created_time_ago = timeAgo($this->created);
+
+    $this->changed = (int) $entity->changed;
+    $this->changed_pretty = date('M d Y, g:ia', $this->changed);
+    $this->changed_time_ago = timeAgo($this->changed);
+  }
+
+  private function set_org_id($entity) {
+    $this->org_id = (int) $entity->field_img_related_org['und'][0]['target_id'];
+  }
+
+  private function set_job_id($entity) {
+    $this->job_id = (int) $entity->field_img_related_job['und'][0]['target_id'];
+  }
+
+  private function set_urls($entity) {
+    $this->delete_url = drupal_get_path_alias('api/v1/images/' . $entity->id . '/delete');
+    $this->view_url = drupal_get_path_alias('o/' . $this->org_id . '/jobs/' . $this->job_id . '/images/' . $this->entity_id . '/view');
+    $this->job_images_url = drupal_get_path_alias('o/' . $this->org_id . '/jobs/' . $this->job_id . '/images');
+  }
+
+  private function set_author($entity) {
+    $author = user_load($entity->uid);
+    $this->author = new NyTechAccount($author);
+  }
+
+  private function set_memo($entity) {
+    if(!empty($entity->field_img_memo)) {
+      $this->memo = $entity->field_img_memo['und'][0]['value'];
+    }
+  }
+
+  private function set_image($entity) {
+    $this->image_url = null;
+    $this->image_output = null;
+    $this->fid = null;
+
+    $image = new NyTechFieldImg('image', $entity, 'field_img_image');
+    $image->output();
+    $this->image_output = $image->output;
+    $this->image_output_thumbnail = $image->output_thumbnail;
+    $this->image_url = $image->urls;
+    $this->fids = $image->fids;
+
+  }
+
+}
+
+
+class NyTechImageCreate {
+  public $entity_id;
+  public $entity;
+
+  function __construct($values) {
+    $edit = [
+      'type' => 'standard',
+      'status' => 1,
+      'uid' => $values['user_id'],
+      'title' => $values['title'],
+    ];
+    $entity = entity_create('image', $edit);
+    $entity->field_img_related_org['und'][0]['target_id'] = $values['org_id'];
+    $entity->field_img_related_job['und'][0]['target_id'] = $values['job_id'];
+    $entity->field_img_memo['und'][0]['value'] = $values['memo'];
+    $entity->field_img_image['und'][0] = $values['image'];
+    entity_save('image', $entity);
+    $this->entity = $entity;
+    $this->entity_id = $entity->id;
+  }
+}
+
+class NyTechImageUpdate {
+  public $entity_id;
+  public $entity;
+  public $title;
+
+  function __construct($values) {
+    $entity = entity_load_single('image', $values['entity_id']);
+    $entity->title = $values['title'];
+    $file = $this->image($values, $entity);
+    $entity->field_img_memo = $this->memo($values);
+    $entity->field_img_image['und'][0] = $file;
+    entity_save('image', $entity);
+    $this->entity = $entity;
+    $this->entity_id = $entity->id;
+  }
+
+  private function memo($values) {
+    if(!empty($values['memo'])) {
+      $array = [];
+      $array['und'][0]['value'] = $values['memo'];
+      return $array;
+    }
+  }
+
+  private function image($values, $entity) {
+    $fidOld = 0;
+    if(!empty($entity->field_img_image)) {
+      $fidOld = $entity->field_img_image['und'][0]['fid'];
+    }
+    $fidNew = $values['image'];
+    $destination = build_uuid_dir_path([
+      'organization' => $values['org_id'],
+      'job'          => $values['job_id']
+    ]);
+    $newFile = new NyTechImageFormSubmit($fidNew, $fidOld, $destination, 'images');
+    return $newFile->file();
+  }
+}
+
+class NyTechImagesListed {
+  public $count;
+  public $org_id;
+  public $job_id;
+  public $objects;
+  public $output;
+  public $image;
+
+  function __construct($org_id, $job_id, $objects) {
+    $this->org_id = $org_id;
+    $this->job_id = $job_id;
+    $this->count = 0;
+    if(!empty($objects)) {
+      $this->objects = $objects;
+      $this->count = count($this->objects);
+    }
+    $this->output();
+  }
+
+  private function get_image($entity) {
+    $image = new NyTechFieldImg('image', $entity, 'field_img_image', 'default');
+    $image->output();
+    return $image;
+  }
+
+  private function get_memo($entity) {
+    $var = '';
+    if(!empty($entity->field_img_memo)) {
+      $var = shorten($entity->field_img_memo['und'][0]['value']);
+    }
+    return $var;
+  }
+
+  private function output() {
+    global $base_url;
+    $output = '<h5 class="item-count"><span class="badge">' . $this->count . ' Images</span></h5>';
+    if(!empty($this->objects)) {
+      $output .= '<div class="row">';
+      foreach($this->objects as $entity) {
+        $memo = $this->get_memo($entity);
+        $image = $this->get_image($entity);
+        $array = [
+          'url'    => $base_url . '/' . drupal_get_path_alias('o/' . $this->org_id . '/jobs/' . $this->job_id . '/images/' . $entity->id . '/view'),
+          'org_id' => $this->org_id,
+          'job_id' => $this->job_id,
+          'date'   => date('M d Y, g:ia', $entity->created),
+          'title'  => $entity->title,
+          'entity' => $entity,
+          'memo'   => $memo,
+          'image'  => $image->output_thumbnail,
+        ];
+        $output .= theme('nytech_image_listed', $array);
+      }
+      $output .= '</div>';
+    } else {
+      $output = '<div class="no-items-found">Add a image!</div>';
+    }
+    $this->output = '<div class="item-results">' . $output . '</div>';
+  }
+}
+
+

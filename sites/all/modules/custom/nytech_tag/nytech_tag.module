@@ -1,0 +1,255 @@
+<?php
+module_load_include('inc', basename(__DIR__), basename(__DIR__) . '.vars');
+
+/**
+ * Implements hook_entity_info().
+ */
+function nytech_tag_entity_info() {
+  $info = [];
+
+  /*
+   * NyTech Tag Entity
+   */
+  $info['nytech_tag_config'] = [
+    'label' => t('Tag Config'),
+    'plural label' => t('Tag Configs'),
+    'entity class' => 'Entity',
+    'controller class' => 'EntityAPIController',
+    'base table' => 'nytech_tag_config',
+    'module' => 'nytech_tag',
+    'entity keys' => [
+      'id' => 'id',
+      'uuid' => 'uuid',
+    ],
+    'bundle keys' => [
+      'bundle' => 'type',
+    ],
+    'fieldable' => TRUE,
+    'label callback' => 'entity_class_label',
+    'uri callback' => 'entity_class_uri',
+    'bundles' => [
+      'standard' => [
+        'label' => t('Tag Config'),
+      ],
+    ],
+    'view modes' => [
+      'full' => [
+        'label' => t('Full'),
+        'custom settings' => FALSE,
+      ],
+    ],
+  ];
+
+  /*
+   * NyTech Tag Entity
+   */
+  $info['nytech_tag'] = [
+    'label' => t('Tag'),
+    'plural label' => t('Tags'),
+    'entity class' => 'Entity',
+    'controller class' => 'EntityAPIController',
+    'base table' => 'nytech_tag',
+    'module' => 'nytech_tag',
+    'entity keys' => [
+      'id' => 'id',
+    ],
+    'bundle keys' => [
+      'bundle' => 'type',
+    ],
+    'fieldable' => TRUE,
+    'label callback' => 'entity_class_label',
+    'uri callback' => 'entity_class_uri',
+    'bundles' => [
+      'standard' => [
+        'label' => t('Tag'),
+      ],
+    ],
+    'view modes' => [
+      'full' => [
+        'label' => t('Full'),
+        'custom settings' => FALSE,
+      ],
+    ],
+  ];
+  return $info;
+}
+
+/**
+ * Implements hook_menu().
+ */
+function nytech_tag_menu() {
+  $items = [];
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('admin/tags/new');
+  $item->title('New Tag');
+  $item->page_callback('screen_admin_tags_new');
+  $item->access_callback('user_is_logged_in');
+  $items = $item->item($items);
+
+  /*
+   * API routs
+   */
+  $item = new NyTechMenu(__DIR__);
+  $item->path('api/v1/tags/%/new');
+  $item->page_callback('api_tags_filter_tag_new');
+  $item->page_arguments([3]);
+  $item->access_callback('user_is_logged_in');
+  $item->json_output();
+  $items = $item->item($items);
+
+  return $items;
+}
+
+function user_can_access_tag($entity_id) {
+  $access = false;
+  return $access;
+}
+
+function nytech_tag_theme($existing, $type, $theme, $path) {
+  $theme = [];
+
+  $item = new NyTechTheme('nytech_tag_listed', __DIR__);
+  $theme = $item->item($theme);
+
+  $item = new NyTechTheme('nytech_tag_view', __DIR__);
+  $theme = $item->item($theme);
+
+  return $theme;
+}
+
+function nytech_tag_preprocess_page(&$variables) {
+  $current_path = current_path();
+
+  // The no title paths
+  $match = new NyTechPathMatch($current_path);
+  $match->add_pattern('tags/new');
+  $match->go();
+  if($match->has_match) {
+    $variables['title'] = null;
+  }
+
+}
+
+
+function nytech_tag_entity_presave($entity, $type) {
+
+}
+
+class NyTechSubmitTag {
+  public $submitted_tag_title;
+  public $filter;
+  public $entity;
+
+  function __construct($filter, $submitted_tag_title) {
+    $this->filter = $filter;
+    $this->submitted_tag_title = nytech_tag_clean($submitted_tag_title);
+    $this->query_or_create_tag();
+  }
+
+  private function query_or_create_tag() {
+    $entity = 'no results found';
+
+    $entity_type = 'nytech_tag';
+    $query = 'SELECT e.* FROM {nytech_tag} e WHERE e.title = :title AND e.filter = :filter';
+    $args = [
+      ':title' => $this->submitted_tag_title,
+      ':filter' => $this->filter,
+    ];
+    $q = db_query($query, $args);
+    $result = false;
+    foreach($q as $row) {
+      $result = $row;
+    }
+    if(!empty($result)) {
+      $entity = entity_load_single($entity_type, $row->id);
+    } else {
+      $entity = $this->create_tag();
+    }
+    $this->entity = $entity;
+  }
+
+  private function create_tag() {
+    $new_tag_class = new NyTechTagCreate($this->filter, $this->submitted_tag_title);
+    return $new_tag_class->entity;
+  }
+
+}
+
+function nytech_tag_clean($string) {
+  $string = strtolower($string);
+  $string = trim($string);
+  $string = preg_replace('/[^a-z-_]/', '', $string);
+  return $string;
+}
+
+
+
+
+class NyTechTagCreate {
+  public $entity_id;
+  public $entity;
+  public $entity_type = 'nytech_tag';
+  public $bundle = 'standard';
+  public $filter;
+  public $title;
+
+  function __construct($filter, $title) {
+    global $user;
+    $edit = [
+      'type' => $this->bundle,
+      'uid' => $user->uid,
+      'title' => $title,
+      'filter' => $filter,
+      'status' => 1,
+      'created' => time(),
+      'uuid' => uuid_generate(),
+    ];
+    $entity = entity_create($this->entity_type, $edit);
+    entity_save($this->entity_type, $entity);
+    $this->entity = $entity;
+    $this->entity_id = $entity->id;
+  }
+}
+
+class NyTechTagConfigCreate {
+  public $entity_id;
+  public $entity;
+  public $entity_type = 'nytech_tag_config';
+  public $bundle = 'standard';
+  public $filter;
+
+  function __construct($filter) {
+    global $user;
+    $default_todo_states = [
+      ['title' => 'New', 'uuid' => '7a70ac70-722f-4409-8515-af99544f3b3a'],
+      ['title' => 'Doing', 'uuid' => 'fea08164-a7e9-491c-b93b-6cd4a86462b0'],
+      ['title' => 'Completed', 'uuid' => '49dd5e33-7877-470c-8be0-ad1a5b866f19'],
+    ];
+    $edit = [
+      'type' => $this->bundle,
+      'uid' => $user->uid,
+      'filter' => $filter,
+      'status' => 1,
+      'created' => time(),
+      'uuid' => uuid_generate(),
+      'data' => serialize($default_todo_states),
+    ];
+    $entity = entity_create($this->entity_type, $edit);
+    entity_save($this->entity_type, $entity);
+    $this->entity = $entity;
+    $this->entity_id = $entity->id;
+  }
+}
+
+class NyTechTag {
+  public $uuid;
+  public $title;
+  public $filter;
+
+  function __construct($entity) {
+    $this->uuid = $entity->uuid;
+    $this->title = ucwords($entity->title);
+    $this->filter = $entity->filter;
+  }
+}

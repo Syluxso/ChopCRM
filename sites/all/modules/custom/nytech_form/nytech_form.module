@@ -1,0 +1,396 @@
+<?php
+
+
+function nytech_form_theme($existing, $type, $theme, $path) {
+  $theme = [];
+  $theme['toggle_button'] = array(
+    'template' => 'toggle--buttons',
+    'path' => drupal_get_path('module', 'nytech_form') . '/templates',
+  );
+  $theme['phone_validation_js'] = array(
+    'template' => 'phone_validation',
+    'path' => drupal_get_path('module', 'nytech_form') . '/templates',
+  );
+  return $theme;
+}
+
+/*
+ * NyTech Form Generate
+ */
+class NyTechForm {
+  public $form;
+  public $title;
+  public $fields = [];
+  public $validate;
+  public $method;
+  public $outer_classes;
+  public $submit;
+  public $suffix;
+
+  function __construct($title = '', $suffix = '') {
+    $this->title = $title;
+    $this->suffix = $suffix;
+    $this->outer_classes = 'card card-body';
+  }
+
+  function set_actions($validate_function_name, $submit_function_name) {
+    $this->form['#validate'][] = $validate_function_name;
+    $this->form['#submit'][] = $submit_function_name;
+  }
+
+  function method($method) {
+    $this->method = $method;
+  }
+
+  function outer_classes($array) {
+    $this->outer_classes = implode(' ', $array);
+  }
+
+  function field($fields) {
+    if(is_array($fields)) {
+      foreach($fields as $field) {
+        $this->fields[$field->name] = $field->field;
+      }
+    } else {
+      $this->fields[$fields->name] = $fields->field;
+    }
+  }
+
+  function start() {
+    $title = '';
+
+    if($this->title) {
+      $title = '<h1>' . $this->title . '</h1>';
+    }
+    return $form['well_start'] = array(
+      '#markup' => $title . '<div class="' . $this->outer_classes . '">',
+    );
+  }
+
+  function end() {
+    return $form['well_end'] = array(
+      '#markup' => '
+      </div><br />
+      ' . $this->suffix
+    );
+  }
+
+  function form() {
+    $array = [];
+    $array['start'] = $this->start();
+    foreach($this->fields as $key => $value) {
+      if($key != 'submit') {
+        $array[$key] = $value[$key];
+      }
+    }
+    $array['end'] = $this->end();
+    if(!empty($this->fields['submit'])) {
+      $array['submit'] = $this->fields['submit'];
+    }
+    if(!empty($this->method)) {
+      $array['#method'] = $this->method;
+    }
+    return $array;
+  }
+}
+
+/*
+ * Form item builder Class
+ */
+class NyTechFormItem {
+  public $name;
+  public $title;
+  public $type;
+  public $required;
+  public $default_value;
+  public $value;
+  public $placeholder;
+  public $classes;
+  public $id;
+  public $options;
+
+  public $is_number;
+  public $input_suffix;
+  public $suffix;
+
+  public $prefix_output = '';
+  public $suffix_output = '';
+  public $output;
+
+  public $date_format;
+  public $attributes;
+  public $is_file;
+  public $file_field_settings;
+
+  function __construct($name, $title, $type) {
+    $this->name = $name;
+    $this->title = $title;
+    $this->type = $type;
+    $this->required = true;
+  }
+
+  function phone_validate($phone_id = 'phone') {
+    $output = theme('phone_validation_js', ['phone_id' => $phone_id]);
+    $this->suffix($output);
+  }
+
+  function output($output) {
+    $this->output = $output;
+  }
+
+  function placeholder($var) {
+    $this->placeholder = $var;
+  }
+
+  function default($var) {
+    if($this->type == 'date') {
+      $var = [
+        'year' => date('Y', $var),
+        'month' => date('n', $var),
+        'day' => date('j', $var),
+      ];
+    }
+    $this->default_value = $var;
+  }
+
+  function value($var) {
+    $this->value = $var;
+  }
+
+  function classes($array) {
+    $this->classes = $array;
+  }
+
+  function id($var) {
+    $this->id = $var;
+  }
+
+  function required($var) {
+    $this->required = $var;
+  }
+
+  function is_number($var) {
+    $this->is_number = $var;
+  }
+
+  function suffix($output) {
+    $this->suffix = $output;
+  }
+
+  function input_suffix($output) {
+    $this->input_suffix = $output;
+  }
+
+  function options($array) {
+    $this->options = $array;
+  }
+
+  function date_format($var) {
+    $this->date_format = $var;
+  }
+
+  function attributes($array) {
+    $this->attributes = $array;
+  }
+
+  function file($location = 'public://uploads/', $validation_types = 'jpg jpeg png', $multiple = false) {
+    $this->is_file = true;
+    $field = [
+      '#type' => 'managed_file',
+      '#required' => true,
+      '#upload_location' => $location,
+      '#upload_validators' => [
+        'file_validate_extensions' => [$validation_types],
+      ],
+      '#multiple' => $multiple,
+    ];
+    $this->file_field_settings = $field;
+  }
+
+  function toggle($list, $type, $default = false) {
+    $this->type = 'markup';
+    $toggle = new NyTechToggle($list, $this->name, $type, $default);
+    $this->output($toggle->output);
+    $this->name = $this->name . '_item';
+    $this->is_toggle = true;
+  }
+
+  function set_input_theme() {
+    $script = '';
+    $input_group_fields = [
+      'textfield',
+      'textarea',
+      'password',
+      'select',
+      'date',
+      'date_popup',
+    ];
+    if(in_array($this->type, $input_group_fields)) {
+      if($this->type == 'date') {
+        $script = '<script>jQuery("#edit-' . $this->name . '").removeClass("form-control");</script>';
+      }
+      $this->prefix_output = '
+        <div class="form-group">
+          <div class="input-group">
+            <div class="input-group-addon">' . $this->title . '</div>';
+      if(!empty($this->input_suffix)) {
+        $this->suffix_output = '<div class="input-group-addon">' . $this->input_suffix . '</div>';
+      }
+      $this->suffix_output = $this->suffix_output . '</div></div>' . $script;
+      if(!empty($this->suffix)) {
+        $this->suffix_output = $this->suffix_output . $this->suffix;
+      }
+    }
+  }
+
+  function set_submit_theme() {
+    $submit_fields = [
+      'submit',
+      'cancel',
+    ];
+    if(in_array($this->type, $submit_fields)) {
+      $this->suffix_output = $this->suffix;
+    }
+  }
+
+  function build() {
+    $array = [];
+    $array['#title'] = $this->title;
+    $array['#type'] = $this->type;
+    $array['#required'] = $this->required;
+
+    if($this->type == 'submit') {
+      $this->set_submit_theme();
+      $array['#value'] = $this->title;
+    } elseif($this->type == 'markup') {
+      $array['#markup'] = $this->output;
+    } elseif($this->type == 'toggle') {
+      // Pass through???
+    } else {
+      $this->set_input_theme();
+    }
+
+    if($this->type == 'date_popup') {
+      $array['#date_format'] = $this->date_format;
+      $array['#date_label_position'] = '';
+      $array['#date_timezone'] = 'America/Los Angeles';
+      $array['#date_year_range'] = '0:+1';
+
+    }
+
+    if(!empty($this->file_field_settings)) {
+      foreach($this->file_field_settings as $key => $value) {
+        $array[$key] = $value;
+      }
+    }
+
+    $attributes = [];
+    if(!empty($this->attributes)) {
+      foreach ($this->attributes as $key => $value) {
+        $attributes[$key] = $value;
+      }
+    }
+    if(!empty($this->classes)) {
+      foreach($this->classes as $class) {
+        $attributes['class'][] = $class;
+      }
+    }
+    if($this->is_number == true) {
+      $attributes[' type'] = 'number';
+    }
+    if(!empty($this->placeholder)) {
+      $attributes['placeholder'] = $this->placeholder;
+    }
+
+    if(!empty($this->default_value)) {
+      $array['#default_value'] = $this->default_value;
+    }
+
+    if(!empty($this->value)) {
+      $array['#value'] = $this->value;
+    }
+
+    if(!empty($this->id)) {
+      $array['#id'] = $this->id;
+    }
+
+    if(!empty($this->options)) {
+      $array['#options'] = $this->options;
+    }
+
+    $array['#attributes'] = $attributes;
+
+    $array['#prefix'] = $this->prefix_output;
+    $array['#suffix'] = $this->suffix_output;
+
+    $this->field[$this->name] = $array;
+  }
+
+  public function add_hidden() {
+    $this->type = 'hidden';
+    $array_name = explode('_', $this->name);
+    $this->name = $array_name[0];
+    $this->build();
+    return $this;
+  }
+
+  function field() {
+    $this->build();
+    return $this;
+  }
+
+}
+
+class NyTechToggle {
+  public $type;
+  public $toggle_name;
+  public $default;
+  public $list;
+  public $output;
+
+  function __construct($list, $toggle_name, $type = 'buttons', $default = '') {
+    $this->toggle_name = $toggle_name; // Will be: 1. input name, class name, etc.
+    $this->type = $type; // Only Buttons for now. We don't have any other types at the moment.
+    $this->default = $default; // Will be used to mark the button as "active".
+    $this->set_list($list);
+    $this->output();
+  }
+
+  private function set_list($list) {
+    $array = [];
+    foreach($list as $item) {
+      $toggle_item = [];
+      if(!empty($item->title)) {
+        $toggle_item['item_label'] = $item->title;
+      }
+      if(!empty($item->id)) {
+        $toggle_item['item_id'] = $item->id;
+      }
+      if(!empty($item->uuid)) {
+        $toggle_item['item_uuid'] = $item->uuid;
+      }
+      $array[] = $toggle_item;
+    }
+    $this->list = $array;
+  }
+
+  public function output() {
+    switch ($this->type) {
+      case 'buttons':
+        $theme = theme('toggle_button', [
+          'list' => $this->list,
+          'toggle_name' => $this->toggle_name,
+          'default' => $this->default,
+        ]);
+        break;
+      default:
+        $theme = theme('toggle_button', [
+          'list' => $this->list,
+          'toggle_name' => $this->toggle_name,
+          'default' => $this->default,
+        ]);
+        break;
+    }
+    $this->output = $theme;
+  }
+}

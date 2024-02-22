@@ -1,0 +1,6 @@
+name = NyTech Tag
+description = Nyberg Technology Tag Module.
+core = 7.x
+package = NyTech
+
+files[] = nytech_tag.module

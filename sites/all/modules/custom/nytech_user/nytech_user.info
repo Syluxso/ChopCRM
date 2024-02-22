@@ -1,0 +1,6 @@
+name = NyTech User
+description = Nyberg Technology User Module.
+core = 7.x
+package = NyTech
+
+files[] = nytech_user.module

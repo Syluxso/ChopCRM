@@ -1,0 +1,500 @@
+<?php
+module_load_include('inc', basename(__DIR__), basename(__DIR__) . '.vars');
+
+/**
+ * Implements hook_menu().
+ */
+function nytech_user_menu() {
+  $items = [];
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path(URL_REGISTER);
+  $item->title('Register');
+  $item->page_callback('screen_register');
+  $item->access_callback(true);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path(URL_LOGIN);
+  $item->title('Login');
+  $item->page_callback('screen_login');
+  $item->access_callback(true);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path(URL_PASSWORD);
+  $item->title('Password reset');
+  $item->page_callback('screen_password');
+  $item->access_callback(true);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path(URL_ACCOUNT);
+  $item->title('Account');
+  $item->page_callback('screen_account');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('a');
+  $item->title('Account Route');
+  $item->access_callback(true);
+  $item->page_callback('api_a_router');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path(URL_ACCOUNT_NEW);
+  $item->title('Account');
+  $item->access_callback(true);
+  $item->page_callback('screen_account_new');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path(URL_ACCOUNT_UPDATE);
+  $item->title('Account Update');
+  $item->page_callback('screen_account_edit');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path(URL_ACCOUNT_MEMBERSHIPS);
+  $item->title('Account Memberships');
+  $item->page_callback('screen_account_memberships');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('s');
+  $item->title('Start');
+  $item->access_callback(true);
+  $item->page_callback('api_s_router');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('account/start');
+  $item->title('Welcome');
+  $item->page_callback('screen_account_start');
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('account/start/update');
+  $item->title('Update Apps');
+  $item->page_callback('screen_account_start_update');
+  $items = $item->item($items);
+
+  return $items;
+}
+
+function nytech_user_theme($existing, $type, $theme, $path) {
+  $theme = [];
+
+  $item = new NyTechTheme('nytech_account', __DIR__);
+  $theme = $item->item($theme);
+
+  $item = new NyTechTheme('nytech_user_apps', __DIR__);
+  $theme = $item->item($theme);
+
+  $item = new NyTechTheme('nytech_app_icon', __DIR__);
+  $theme = $item->item($theme);
+
+  $item = new NyTechTheme('nytech_user_apps_edit', __DIR__);
+  $theme = $item->item($theme);
+
+  return $theme;
+}
+
+class NyTechRegister {
+
+  function __construct($email, $phone, $pass) {
+    if(!empty($email) && !empty($phone) && !empty($pass)) {
+      return $this->new_user($email, $phone, $pass);
+    } else {
+      return false;
+    }
+  }
+
+  function new_user($email, $phone, $pass) {
+    require './includes/password.inc';
+    $user = user_load_by_mail($email);
+    if($user !== false) {
+      return false;
+    } else {
+      $phone = NyTechPhone::pretty_phone($phone);
+      $name = date('Ymdgia') . '_' . rand(1000, 9999) . '_tmpaccount';
+      $new_user = array(
+        'name' => $name,
+        'pass' => $pass, // note: do not md5 the password
+        'mail' => $email,
+        'status' => 1,
+        'init' => $email,
+        'roles' => array(
+          DRUPAL_AUTHENTICATED_RID => 'authenticated user',
+        ),
+      );
+      $new_user['field_user_phone']['und'][0]['value'] = $phone;
+      $this->user = user_save('', $new_user);
+      new NyTechLogin($name, $pass);
+    }
+  }
+}
+
+class NyTechPassword {
+
+  private $phone;
+  public $code;
+
+  function __construct($phone) {
+    if(!empty($phone)) {
+      $this->phone = NyTechPhone::clean_phone($phone);
+      $this->code();
+      $this->password($phone);
+      $this->sms();
+    } else {
+      return false;
+    }
+  }
+
+  private function code() {
+    $this->code = rand(1000, 9999);
+  }
+
+  private function password() {
+    require './includes/password.inc';
+    $user = user_load_by_phone($this->phone);
+    if($user == false) {
+      return false;
+    } else {
+      $edit = [
+        'pass' => (string) $this->code,
+      ];
+      $this->user = user_save($user, $edit);
+    }
+  }
+
+  private function sms() {
+    // new NyTechSendSMS($this->phone, 'New Passcode', 'Your new passcode is ' . $this->code);
+    drupal_set_message('EXAMPLE: In the live system your sms would be sent to you.');
+    drupal_set_message('NEW PASS CODE: ' . $this->code);
+  }
+}
+
+class NyTechAccountUpdate {
+  function __construct($values) {
+    $this->values = $values;
+    $this->phone_from_values = NyTechPhone::clean_phone($this->values['phone']);
+    $this->edit = []; // Create empty edit array.
+
+    $this->user();
+    $this->user_name();
+    $this->phone();
+    $this->email();
+    $this->password();
+    $this->name();
+    $this->save();
+  }
+
+  private function user() {
+    global $user;
+    $phone_user = user_load_by_phone($this->phone_from_values);
+    $this->phone_user = $phone_user;
+    $this->account = user_load($user->uid);
+  }
+
+  private function user_name() {
+    $this->edit['name'] = $this->account->mail;
+  }
+
+  private function password() {
+    if(!empty($this->values['pass'])) {
+      $this->edit['pass'] = $this->values['pass'];
+    }
+  }
+
+  private function name() {
+    $this->account->field_user_first_name['und'][0]['value'] = $this->values['first'];
+    $this->account->field_user_last_name ['und'][0]['value'] = $this->values['last'];
+  }
+
+  private function phone() {
+    $this->account->field_user_phone['und'][0]['value'] = $this->phone_from_values;
+  }
+
+  private function email() {
+    $this->account->mail = $this->values['email'];
+    $this->edit['pass']  = $this->values['email'];
+  }
+
+  private function save() {
+    require './includes/password.inc';
+    user_save($this->account, $this->edit);
+  }
+}
+
+class NyTechLogin {
+
+  public $name;
+  public $pass;
+
+  public $validated_auth;
+
+  public $user_id;
+  public $user;
+  public $sid;
+
+  function __construct($name, $pass) {
+    $this->name = $name;
+    $this->pass = $pass;
+    $this->set_user_id();
+    $this->validate();
+  }
+
+  private function set_user_id() {
+    $user_id = user_authenticate($this->name, $this->pass);
+    $this->user_id = $user_id;
+    if($this->user_id > 0) {
+      $validated_auth = true;
+    } else {
+      $validated_auth = false;
+    }
+    $this->validated_auth = $validated_auth;
+  }
+
+  private function validate() {
+    if($this->user_id > 0) {
+      $account = array('uid' => $this->user_id);
+      user_login_submit(array(), $account);
+      global $user;
+      $sid = session_id();
+      $this->user = $user;
+      $this->user_id = $user->uid;
+      $this->sid = $sid;
+    }
+  }
+}
+
+/**
+ * Implements hook_init().
+ */
+function nytech_user_init() {
+  global $user;
+  if ($user->uid > 0) {
+    $account = user_load($user->uid);
+    $user->eClass = new NyTechAccount($account);
+  }
+}
+
+function nytech_user_preprocess_page(&$variables) {
+  if(user_is_logged_in()) {
+    global $user;
+    $user = user_load($user->uid);
+    $account = new NyTechAccount($user);
+    $js = '
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("userPhone", "' . $account->phone_pretty . '");
+        console.log(localStorage);
+      }
+    ';
+    drupal_add_js($js, array('type' => 'inline', 'scope' => 'footer', 'group' => JS_THEME));
+  }
+
+  global $user;
+  $currentPath = current_path();
+  $pathArray = explode('/', $currentPath);
+  $forward = [
+    'user',
+    'user/login',
+    'user/register',
+    'user/password',
+    'user/*'
+  ];
+  if(!is_admin()) {
+    foreach($forward as $path) {
+      if(drupal_match_path($currentPath, $path)) {
+        drupal_goto(URL_ACCOUNT);
+      }
+    }
+  }
+
+  if(user_is_logged_in()) {
+    if(count($user->roles) == 1) {
+      $account = user_load($user->uid);
+      if(empty($account->field_user_first_name) or empty($account->field_user_last_name)) {
+        if($currentPath != URL_ACCOUNT_NEW) {
+          drupal_goto(URL_ACCOUNT_NEW);
+        }
+      }
+    }
+  }
+
+  if(drupal_match_path($currentPath, 'account/start')) {
+    $variables['title'] = '';
+  }
+
+
+}
+
+class NyTechAccount {
+  public $email = '';
+  public $user_id = 0;
+  public $phone = '';
+  public $phone_pretty = '';
+  public $first = '';
+  public $last = '';
+  public $roles;
+
+  function __construct($account) {
+    if(is_object($account)) {
+      if(!empty($account->mail)) {
+        $this->email        = $account->mail;
+      }
+
+      if(!empty($account->uid)) {
+        $this->user_id      = (int) $account->uid;
+      }
+
+      if(!empty($account->field_user_phone)) {
+        $this->phone        = NyTechPhone::clean_phone($account->field_user_phone['und'][0]['value']);
+      }
+
+      if(!empty($account->field_user_phone)) {
+        $this->phone_pretty = NyTechPhone::pretty_phone($account->field_user_phone['und'][0]['value']);
+      }
+
+      if(!empty($account->field_user_first_name)) {
+        $this->first        = $account->field_user_first_name['und'][0]['value'];
+      }
+
+      if(!empty($account->field_user_last_name)) {
+        $this->last         = $account->field_user_last_name['und'][0]['value'];
+      }
+
+      $this->name         = $this->first . ' ' . $this->last;
+    }
+  }
+}
+
+function pre_auth_links() {
+  $output = '
+    <div class="auth--tabs">
+      <div class="btn-group hidden-xs hidden-sm">
+      ' . l('Register', URL_REGISTER, ['attributes' => ['class' => ['btn', 'btn-sm', 'btn-link']]]) . '
+      ' . l('Login', URL_LOGIN, ['attributes' => ['class' => ['btn', 'btn-sm', 'btn-link']]]) . '
+      ' . l('Reset Password', URL_PASSWORD, ['attributes' => ['class' => ['btn', 'btn-sm', 'btn-link']]]) . '
+      </div>
+      <div class="hidden-md hidden-lg">
+      ' . l('Register', URL_REGISTER, ['attributes' => ['class' => ['btn', 'btn-sm', 'btn-default']]]) . '
+      ' . l('Login', URL_LOGIN, ['attributes' => ['class' => ['btn', 'btn-sm', 'btn-default']]]) . '
+      ' . l('Reset Password', URL_PASSWORD, ['attributes' => ['class' => ['btn', 'btn-sm', 'btn-default']]]) . '
+      </div>
+    </div>
+  ';
+  return $output;
+}
+
+function nytech_user_user_presave(&$edit, $account, $category) {
+}
+
+function nytech_user_user_update(&$edit, $account, $category) {
+}
+
+function nytech_user_entity_presave($entity, $type) {
+}
+
+
+
+/**
+ * Implements hook_block_info().
+ */
+function nytech_user_block_info() {
+  $blocks['nytech_user_my_ads'] = array(
+    'info' => t('My Ads'),
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function nytech_user_block_view($delta = '') {
+  global $user;
+  $block = array();
+  switch ($delta) {
+    case 'nytech_user_my_ads':
+      $block['content'] = '
+      <hr />
+      <h3>My Ads</h3>
+      <div class="card card-body">
+    ' . l('My Ads', 'ads', ['attributes' => ['class' => ['group-list-item']]]) . '
+    ' . l('Create New Ad', URL_AD_CREATE, ['attributes' => ['class' => ['group-list-item']]]) . '
+      </div>';
+      break;
+  }
+  return $block;
+}
+
+function user_tabs() {
+  $class = ['btn', 'btn-sm', 'btn-block', 'btn-link'];
+  $output = '
+  <ul class="list-inline list-unstyled hidden-xs hidden-md">
+    <li>' . l('Profile', URL_ACCOUNT) . '</li>
+    <li>' . l('Update Profile', URL_ACCOUNT_UPDATE) . '</li>
+    <li>' . l('My Companies', URL_ACCOUNT_MEMBERSHIPS) . '</li>
+  </ul>
+  <div class="list-inline list-unstyled hidden-md hidden-lg">' .
+    l('Profile', URL_ACCOUNT, ['attributes' => ['class' => $class]]) .
+    l('Update Profile', URL_ACCOUNT_UPDATE, ['attributes' => ['class' => $class]]) .
+    l('My Companies',URL_ACCOUNT_MEMBERSHIPS, ['attributes' => ['class' => $class]]) .
+  '</div>';
+  return $output;
+}
+
+function get_account() {
+  $account = new stdClass();
+  $account->name = 'Guest';
+  $account->first = 'Guest';
+  $account->user_id = 0;
+  if(user_is_logged_in()) {
+    global $user;
+    $user = user_load($user->uid);
+    $account = new NyTechAccount($user);
+    $account->roles = $user->roles;
+    $account->user = $user;
+  }
+  return $account;
+}
+
+class NyTechAppIcon {
+  public $id;
+  public $icon;
+  public $url;
+  public $title;
+  public $output;
+
+  function __construct($id, $icon, $title, $url) {
+    $this->id     = $id;
+    $this->icon   = $icon;
+    $this->title  = $title;
+    $this->url($url);
+  }
+
+  public function url($var) {
+    global $base_url;
+    $this->url = $base_url . '/' . $var;
+  }
+
+  public function icon($var) {
+    $this->icon = $var;
+  }
+
+  public function title($var) {
+    $this->title= $var;
+  }
+
+  public function output() {
+    $array = [
+      'id'    => $this->id,
+      'icon'  => $this->icon,
+      'url'   => $this->url,
+      'title' => $this->title,
+    ];
+    $this->output = theme('nytech_app_icon', $array);
+  }
+}
+

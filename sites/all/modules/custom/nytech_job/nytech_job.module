@@ -1,0 +1,278 @@
+<?php
+module_load_include('inc', basename(__DIR__), basename(__DIR__) . '.vars');
+
+/**
+ * Implements hook_menu().
+ */
+function nytech_job_menu() {
+  $items = [];
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('jobs');
+  $item->title('Jobs');
+  $item->page_callback('api_jobs');
+  $item->access_callback(true);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/jobs');
+  $item->title('Jobs');
+  $item->page_callback('screen_o_jobs');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/jobs/new');
+  $item->title('Create Job');
+  $item->page_callback('screen_o_job_new');
+  $item->page_arguments([1]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/jobs/%/view');
+  $item->title('Job');
+  $item->page_callback('screen_o_job_view');
+  $item->page_arguments([1,3]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1,3]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/jobs/%/update');
+  $item->title('Job');
+  $item->page_callback('screen_o_job_update');
+  $item->page_arguments([1,3]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1,3]);
+  $items = $item->item($items);
+
+  $item = new NyTechMenu(__DIR__);
+  $item->path('o/%/jobs/%/delete');
+  $item->title('Create Job');
+  $item->page_callback('api_o_job_archive');
+  $item->page_arguments([1,3]);
+  $item->access_callback('user_is_org_member');
+  $item->access_arguments([1,3]);
+  $items = $item->item($items);
+
+  return $items;
+}
+
+function nytech_job_theme($existing, $type, $theme, $path) {
+  $theme = [];
+
+  $item = new NyTechTheme('nytech_job_listed', __DIR__);
+  $theme = $item->item($theme);
+
+  $item = new NyTechTheme('nytech_job_view', __DIR__);
+  $theme = $item->item($theme);
+
+  return $theme;
+}
+
+function nytech_job_preprocess_page(&$variables) {
+  $current_path = current_path();
+  $path_array = explode('/', $current_path);
+
+  $match = new NyTechPathMatch($current_path);
+  $match->add_pattern('o/*/jobs/*/view');
+  $match->add_pattern('o/*/jobs/*/docs');
+  $match->add_pattern('o/*/jobs/*/images');
+  $match->add_pattern('o/*/jobs/*/costs');
+  $match->add_pattern('o/*/jobs/*/notes');
+  $match->go();
+
+  if($match->has_match) {
+    $variables['title'] = '';
+    $org_id = $path_array[1];
+    $job_id = $path_array[3];
+    $variables['back'] = l('<i class="fa fa-chevron-left"></i> ' . JOBS, 'o/' . $org_id . '/jobs', ['html' => true]);
+    $variables['action'] = l('<i class="fa fa-pencil"></i>', 'o/' . $org_id . '/jobs/' . $job_id . '/update', ['html' => true]);
+  }
+
+  $match = new NyTechPathMatch($current_path);
+  $match->add_pattern('o/*/jobs/new');
+  $match->go();
+
+  if($match->has_match) {
+    $variables['title'] = '';
+    $org_id = $path_array[1];
+    $variables['back'] = l('<i class="fa fa-chevron-left"></i> ' . JOBS, 'o/' . $org_id . '/jobs', ['html' => true]);
+  }
+
+  $match = new NyTechPathMatch($current_path);
+  $match->add_pattern('o/*/jobs');
+  $match->go();
+
+  if($match->has_match) {
+    // $variables['title'] = '';
+    $org_id = $path_array[1];
+    $variables['action'] = l('<i class="fa fa-plus-circle"></i> ' . JOBS, 'o/' . $org_id . '/jobs/new', ['html' => true]);
+  }
+
+}
+
+
+function nytech_job_entity_presave($entity, $type) {
+
+}
+
+class NyTechOrgJobs {
+  public $org_id;
+  public $count;
+  public $objects;
+  public $user;
+  public $output;
+
+  function __construct($entity_id) {
+    $this->org_id = $entity_id;
+    $this->count = 0;
+  }
+
+  public function query() {
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', 'job')
+      ->entityCondition('bundle', 'standard')
+      ->propertyOrderBy('created', 'DESC')
+      ->fieldCondition('field_j_related_org', 'target_id', $this->org_id, '=')
+      ->addMetaData('account', user_load(1));
+
+    $result = $query->execute();
+    if (isset($result['job'])) {
+      $ids = array_keys($result['job']);
+      $this->objects = entity_load('job', $ids);
+      $this->count = count($this->objects);
+    }
+  }
+}
+
+class NyTechJob {
+  public $uuid;
+  public $entity_id;
+
+  public $created;
+  public $created_pretty;
+  public $created_time_ago;
+
+  public $changed;
+  public $changed_pretty;
+  public $changed_time_ago;
+
+  public $title;
+  public $status;
+  public $delete_url;
+  public $view_url;
+  public $docs_url;
+  public $images_url;
+  public $receipts_url;
+  public $notes_url;
+
+  public $user_id;
+  public $org_id;
+  public $address;
+
+
+
+  function __construct($entity) {
+    $this->entity_id = $entity->id;
+    $this->user_id = (int) $entity->uid;
+    $this->status = (int) $entity->status;
+    $this->title = $entity->title;
+    $this->uuid = $entity->uuid;
+
+    $this->set_author($entity);
+    $this->set_org_id($entity);
+    $this->set_address($entity);
+    $this->set_date($entity);
+    $this->set_urls($entity);
+  }
+
+  private function set_date($entity) {
+    $this->created = (int) $entity->created;
+    $this->created_pretty = date('g:ia - m-d-Y', $this->created);
+    $this->created_time_ago = timeAgo($this->created);
+
+    $this->changed = (int) $entity->changed;
+    $this->changed_pretty = date('g:ia - m-d-Y', $this->changed);
+    $this->changed_time_ago = timeAgo($this->changed);
+  }
+
+  private function set_org_id($entity) {
+    $this->org_id = (int) $entity->field_j_related_org['und'][0]['target_id'];
+  }
+
+  private function set_address($entity) {
+    $this->address = '';
+    $this->address_url = '';
+    if(!empty($entity->field_j_address)) {
+      $this->address = $entity->field_j_address['und'][0]['value'];
+      $this->address_url = l($this->address, 'https://www.google.com/maps/search/' . $this->address);
+    }
+  }
+
+  private function set_urls($entity) {
+    $this->delete_url = drupal_get_path_alias('api/v1/jobs/' . $entity->id . '/delete');
+    $this->view_url = drupal_get_path_alias('o/' . $this->org_id . '/jobs/' . $this->entity_id . '/view');
+    $this->docs_url = drupal_get_path_alias('o/' . $this->org_id . '/jobs/' . $this->entity_id . '/docs');
+    $this->images_url = drupal_get_path_alias('o/' . $this->org_id . '/jobs/' . $this->entity_id . '/images');
+    $this->receipts_url = drupal_get_path_alias('o/' . $this->org_id . '/jobs/' . $this->entity_id . '/receipts');
+    $this->notes_url = drupal_get_path_alias('o/' . $this->org_id . '/jobs/' . $this->entity_id . '/notes');
+  }
+
+  private function set_author($entity) {
+    $author = user_load($entity->uid);
+    $this->author = new NyTechAccount($author);
+  }
+
+}
+
+
+class NyTechJobCreate {
+  function __construct($values) {
+    $edit = [
+      'type' => 'standard',
+      'title' => $values['title'],
+      'status' => 1,
+      'uid' => $values['user_id'],
+    ];
+    $entity = entity_create('job', $edit);
+    $entity->field_j_related_org['und'][0]['target_id'] = $values['entity_id'];
+    $entity->field_j_address['und'][0]['value'] = $values['address'];
+    entity_save('job', $entity);
+    $this->entity = $entity;
+    $this->entity_id = $entity->id;
+  }
+}
+
+class NyTechJobUpdate {
+  public $entity;
+
+  function __construct($entity, $values) {
+    $this->entity = $entity;
+    $this->title($values);
+    $this->address($values);
+    $this->save();
+  }
+
+  private function title($values) {
+    $entity = $this->entity;
+    $entity->title = $values['title'];
+    $this->entity = $entity;
+  }
+
+  private function address($values) {
+    $entity = $this->entity;
+    $entity->field_j_address['und'][0]['value'] = $values['address'];
+    $this->entity = $entity;
+  }
+
+  private function save() {
+    $entity = $this->entity;
+    entity_save('job', $entity);
+    $this->entity = $entity;
+  }
+}

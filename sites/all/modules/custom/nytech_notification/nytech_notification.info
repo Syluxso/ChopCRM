@@ -1,0 +1,6 @@
+name = NyTech Notification
+description = Nyberg Technology Notification Module.
+core = 7.x
+package = NyTech
+
+files[] = nytech_notification.module

@@ -1,0 +1,6 @@
+name = NyTech Report
+description = Nyberg Technology Report Module.
+core = 7.x
+package = NyTech
+
+files[] = nytech_report.module

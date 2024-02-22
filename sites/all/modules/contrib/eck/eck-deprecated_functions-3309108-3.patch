@@ -1,0 +1,57 @@
+From b194f5d048a7971c64381f1647496198f0938d42 Mon Sep 17 00:00:00 2001
+From: Mohammad AlQanneh <28417-mqanneh@users.noreply.drupalcode.org>
+Date: Sun, 11 Sep 2022 23:15:24 +0300
+Subject: [PATCH] Issue #3309108: Deprecated function: Return type of
+ DBObject::current() should either be compatible with Iterator::current()
+
+---
+ eck.classes.inc | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/eck.classes.inc b/eck.classes.inc
+index 27ff88d..e6d8c8a 100644
+--- a/eck.classes.inc
++++ b/eck.classes.inc
+@@ -163,6 +163,7 @@ class DBObject implements Iterator {
+     }
+   }
+ 
++  #[\ReturnTypeWillChange]
+   /**
+    * From Iterator Interface.
+    */
+@@ -170,6 +171,7 @@ class DBObject implements Iterator {
+     $this->position = 0;
+   }
+ 
++  #[\ReturnTypeWillChange]
+   /**
+    * From Iterator Interface.
+    */
+@@ -177,6 +179,7 @@ class DBObject implements Iterator {
+     return $this->data[$this->key()];
+   }
+ 
++  #[\ReturnTypeWillChange]
+   /**
+    * From Iterator Interface.
+    */
+@@ -184,6 +187,7 @@ class DBObject implements Iterator {
+     return $this->vars[$this->position];
+   }
+ 
++  #[\ReturnTypeWillChange]
+   /**
+    * From Iterator Interface.
+    */
+@@ -191,6 +195,7 @@ class DBObject implements Iterator {
+     ++$this->position;
+   }
+ 
++  #[\ReturnTypeWillChange]
+   /**
+    * From Iterator Interface.
+    */
+-- 
+2.34.1
+

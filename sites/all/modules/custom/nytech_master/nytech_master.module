@@ -1,0 +1,1015 @@
+<?php
+module_load_include('inc', 'nytech_master', 'nytech_master.classes');
+
+/**
+ * Implements hook_menu().
+ */
+function nytech_master_menu() {
+
+  $items['admin/config/development/settings'] = array(
+    'title' => 'Site Settings',
+    'page callback' => 'screen_site_settings',
+    'access callback' => 'is_admin',
+    'file' => 'nytech_master.pages.inc',
+    'file path' => drupal_get_path('module', 'nytech_master'),
+  );
+
+  $items['home'] = array(
+    'title' => 'Start',
+    'page callback' => 'api_home',
+    'access callback' => true,
+    'file' => 'nytech_master.pages.inc',
+    'file path' => drupal_get_path('module', 'nytech_master'),
+  );
+
+  $items['downloads/%/%/%'] = array(
+    'page callback' => 'api_download_org_item',
+    'page arguments' => [1,2,3],
+    'access callback' => 'user_is_org_member_uuid',
+    'access arguments' => [1],
+    'file' => 'nytech_master.pages.inc',
+    'file path' => drupal_get_path('module', 'nytech_master'),
+  );
+
+  return $items;
+}
+
+function nytech_master_theme($existing, $type, $theme, $path) {
+  $theme = [];
+
+  $item = new NyTechTheme('nytech_modal_fake', __DIR__);
+  $theme = $item->item($theme);
+
+  $item = new NyTechTheme('nytech_item_simple', __DIR__);
+  $theme = $item->item($theme);
+
+  $item = new NyTechTheme('nytech_collapse', __DIR__);
+  $theme = $item->item($theme);
+
+  return $theme;
+}
+
+function is_admin() {
+  $access = false;
+  if(user_is_logged_in()) {
+    global $user;
+    if(in_array('administrator', $user->roles)) {
+      $access = true;
+    }
+  }
+  return $access;
+}
+
+function nytech_master_preprocess_page(&$variables) {
+  new NyTechForceDomain;
+}
+
+class NyTechForceDomain {
+  public $root_url;
+  public $current_path;
+
+  function __construct() {
+    $this->HTTP_HOST = $_SERVER['HTTP_HOST'];
+    $this->forward();
+  }
+
+  private function forward() {
+    // If the host is hammerheaddocs.com then check if it is https and www. If not forward that mug yo!
+    if(strpos($this->HTTP_HOST, 'hammerheaddocs.com') === 0) {
+      if(strpos($_SERVER['HTTP_HOST'], 'www.') == false) {
+        $destination = 'https://www.hammerheaddocs.com';
+      }
+      drupal_goto($destination);
+    }
+  }
+}
+
+function nytech_master_entity_presave($entity, $type) {
+  if($type == 'example') {
+
+  }
+}
+
+class NyTechPhone {
+  static function pretty_phone($phone) {
+    $phone = preg_replace('/^\+?1|\|1|\D/', '', ($phone));;
+    $phone = NyTechPhone::clean_phone($phone);
+    $phone = preg_replace("/([0-9]{3})([0-9]{3})([0-9]{4})/", "($1) $2-$3", $phone);
+    return $phone;
+  }
+
+  static function clean_phone($phone) {
+    $phone = preg_replace('/[^0-9]/', '', $phone);
+    return $phone;
+  }
+
+  static function pretty_phone_dashes($phone) {
+    $phone = preg_replace('/^\+?1|\|1|\D/', '', ($phone));;
+    $phone = NyTechPhone::clean_phone($phone);
+    $phone = preg_replace("/^1?(\d{3})(\d{3})(\d{4})$/", "$1-$2-$3", $phone);
+    return $phone;
+  }
+}
+
+function dump($var) {
+  var_dump($var);
+}
+
+function dumpk($var) {
+  var_dump($var);
+  exit;
+}
+
+class NyTechLogErrors {
+  static function log($vars, $type = 'NyTech') {
+    watchdog($type, '@vars',  array('vars' => print_r([$vars,], true)), WATCHDOG_NOTICE);
+  }
+}
+
+function auth_goto($path) {
+  if(user_is_logged_in()) {
+    drupal_goto($path);
+  }
+}
+
+function non_auth_goto($path) {
+  if(!user_is_logged_in()) {
+    drupal_goto($path);
+  }
+}
+
+function user_load_by_phone($phone) {
+  $user_id = search_user_by_phone($phone);
+  if($user_id != false) {
+    return user_load($user_id);
+  }
+  return false;
+}
+
+function search_user_by_phone($phone) {
+  $phone = NyTechPhone::pretty_phone($phone);
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'user')
+    ->fieldCondition('field_user_phone', 'value', $phone, '=')
+    ->addMetaData('account', user_load(1));
+  $result = $query->execute();
+  if (isset($result['user'])) {
+    $ids = array_keys($result['user']);
+    $result = array_pop($ids);
+  } else {
+    $result = false;
+  }
+  return $result;
+}
+
+class NyTechMenu {
+  public $values;
+  public $item;
+
+  function __construct($module_dir) {
+    $this->values = [
+      'module_name' => basename($module_dir),
+    ];
+    $item = [
+      'title' => 'Page',
+      'page callback' => '',
+      'access callback' => 'user_is_logged_in',
+      'file' => $this->values['module_name'] . '.pages.inc',
+      'file path' => drupal_get_path('module', $this->values['module_name']),
+    ];
+    $this->item = $item;
+  }
+
+  /*
+   * Static values
+   */
+  public function path($var) {
+    $this->values['key'] = $var;
+  }
+
+  public function title($var) {
+    $this->item['title'] = $var;
+  }
+
+  public function page_callback($var) {
+    $this->item['page callback'] = $var;
+  }
+
+  public function access_callback($var) {
+    $item = $this->item;
+    $item['access callback'] = $var;
+    $this->item = $item;
+  }
+
+  /*
+   * Arguments
+   */
+  public function page_arguments($args) {
+    $item = $this->item;
+    $item['page arguments'] = $args;
+    $this->item = $item;
+  }
+
+  public function access_arguments($args) {
+    $item = $this->item;
+    $item['access arguments'] = $args;
+    $this->item = $item;
+  }
+
+  /*
+   * Auto assignments (no input).
+   */
+  public function json_output() {
+    $item = $this->item;
+    $item['delivery callback'] = 'drupal_json_output';
+    $this->item = $item;
+  }
+
+  public function item($items) {
+    $items[$this->values['key']] = $this->item;
+    return $items;
+  }
+}
+
+class NyTechTheme {
+  function __construct($key, $module_dir) {
+    $this->values = [
+      'key' => $key,
+      'module_name' => basename($module_dir),
+    ];
+    $item = [
+      'template' => 'nytech--' . $this->values['key'],
+      'path' => drupal_get_path('module', $this->values['module_name']) . '/templates',
+    ];
+    $this->item = $item;
+  }
+
+  public function item($theme) {
+    $theme[$this->values['key']] = $this->item;
+    return $theme;
+  }
+}
+
+class NyTechSESSION {
+  public $session;
+
+  function __construct() {
+    if(isset($_SESSION)) {
+      $this->session = $_SESSION;
+    }
+  }
+
+  public function start() {
+    if(!isset($this->session)) {
+      session_start();
+      if(isset($_SESSION)) {
+        $this->session = $_SESSION;
+      }
+    }
+  }
+
+  public function get_value($key) {
+    if(isset($this->session)) {
+      if(key_exists($this->session[$key])) {
+        return $this->session[$key];
+      }
+    }
+  }
+
+  public function delete_value($key) {
+    if(isset($this->session)) {
+      if(key_exists($key, $this->session)) {
+        unset($this->session);
+        $_SESSION = $this->session;
+      }
+    }
+  }
+
+  public function set_value($key, $value) {
+    if(isset($this->session)) {
+      if(key_exists($key, $this->session)) {
+        $this->session[$key] = $value;
+        $_SESSION = $this->session;
+      }
+    }
+  }
+
+  public function destroy() {
+    if(isset($_SESSION)) {
+      $_SESSION = false;
+      session_destroy();
+    }
+
+  }
+
+}
+
+class NyTechPath {
+
+  function __construct($type = false) {
+    switch ($type) {
+      case 'base':
+        $url = $this->base();
+        break;
+      default:
+        $url = $this->root();
+        break;
+    }
+    $this->url = $url;
+  }
+  private function base() {
+    global $base_url;
+    return base_path();
+  }
+
+  private function site() {
+    global $base_url;
+    return $base_url;
+  }
+
+  private function root() {
+    global $base_url;
+    return $base_url;
+  }
+}
+
+
+function timeAgo($timestamp) {
+  $timeDifference = time() - $timestamp;
+
+  if ($timeDifference < 1) {
+    return 'just now';
+  }
+
+  $timeUnits = array(
+    'year' => 60 * 60 * 24 * 365,
+    'month' => 60 * 60 * 24 * 30,
+    'week' => 60 * 60 * 24 * 7,
+    'day' => 60 * 60 * 24,
+    'hour' => 60 * 60,
+    'minute' => 60,
+    'second' => 1
+  );
+
+  foreach ($timeUnits as $unitName => $unitSeconds) {
+    if ($timeDifference >= $unitSeconds) {
+      $unitValue = floor($timeDifference / $unitSeconds);
+      $plural = ($unitValue > 1) ? 's' : '';
+      return "{$unitValue} {$unitName}{$plural} ago";
+    }
+  }
+}
+
+function shorten($string, $chars = 140) {
+  $suffix = '';
+  $s_len = strlen($string);
+  if($s_len > $chars) {
+    $suffix = '...';
+  }
+  $output = strip_tags($string);
+  $output = mb_substr($output, 0, $chars);
+  return $output . $suffix;
+}
+
+class NyTechPathMatch {
+  public $path;
+  public $patterns;
+  public $report;
+  public $has_match;
+
+  function __construct($path) {
+    $this->path($path);
+    $this->has_match = false;
+    $this->patterns = [];
+    $this->report = [];
+  }
+
+  private function path($path) {
+    $this->path = $this->process_pattern($path);
+  }
+
+  private function process_pattern($pattern, $id = false) {
+    $parts = explode('/', $pattern);
+    $pattern_array = [
+      'pattern' => $pattern,
+      'parts' => $parts,
+      'count' => count($parts),
+    ];
+
+    if($id !== false) {
+      $pattern_array[$id] = $pattern_array;
+    }
+
+    return $pattern_array;
+  }
+
+  public function add_pattern($pattern) {
+    $patterns       = $this->patterns;
+    $new_pattern    = $this->process_pattern($pattern);
+    array_push($patterns, $new_pattern);
+    $this->patterns = $patterns;
+  }
+
+  public function go() {
+    $report = $this->report;
+    foreach($this->patterns as $key => $pattern) {
+      $report[$key] = $this->report_pattern($pattern);
+    }
+
+    $this->report = $report;
+  }
+
+  private function report_pattern($pattern) {
+    $access = false;
+    $array = [
+      'pattern' => $pattern['pattern'],
+      'access' => $access,
+    ];
+    if($this->path['count'] === $pattern['count']) {
+      $access = true;
+      foreach($pattern['parts'] as $key =>  $part) {
+        if($part !== '*') {
+          if($this->path['parts'][$key] !== $part) {
+            $access = false;
+          }
+        }
+      }
+    }
+
+    $array['access'] = $access;
+
+    $this->set_match_true($access);
+
+    return $array;
+  }
+
+  private function set_match_true($access) {
+    if($access === true) {
+      $this->has_match = true;
+    }
+  }
+
+}
+
+class NyTechFileMove {
+  public $tmp_file;
+  public $area;
+  public $file_type;
+  public $file_mime;
+  public $file_ext;
+  public $file;
+
+  function __construct($file) {
+    $this->tmp_file = $file;
+    $this->set_file_type($file);
+  }
+
+  private function set_file_type($file) {
+    if(!empty($file->filemime)) {
+      $array = explode('/', $file->filemime);
+      $this->file_type = $array[0];
+      $this->file_ext  = $array[1];
+    }
+  }
+
+  public function move($destination, $area = null) {
+    $this->area = $area;
+    if(!is_string($this->area)) {
+      $this->area = 'tank';
+    }
+    if(!empty($destination)) {
+      $destination = 'public://' . $this->area . '/' . $destination;
+      $file = $this->tmp_file;
+      $file->filename = $this->tmp_file->uuid . '.' . $this->file_ext;
+      $file->status = FILE_STATUS_PERMANENT;
+      file_prepare_directory($destination, FILE_CREATE_DIRECTORY|FILE_MODIFY_PERMISSIONS);
+      $this->file = file_move($file, $destination, FILE_EXISTS_REPLACE);
+    }
+  }
+
+  public function file_array() {
+    if(!empty($this->file)) {
+      return (array) $this->file;
+    }
+  }
+}
+
+class NyTechGetEntityIDByUuid {
+  public $entity_id = false;
+  public $entity = false;
+
+  function __construct($entity_type, $uuid) {
+    $db_entity_name = 'eck_' . $entity_type;
+    $query = 'SELECT e.id, e.uuid FROM {' . $db_entity_name . '} e WHERE e.uuid = :uuid';
+    $args = [
+      ':uuid' => $uuid,
+    ];
+    $q = db_query($query, $args);
+    foreach($q as $row) {
+      $entity = entity_load_single($entity_type, $row->id);
+      $this->entity_id = (int) $entity->id;
+      $this->entity = $entity;
+    }
+  }
+}
+
+class NyTechGetUuidByEntityID {
+  public $uuid;
+  public $entity;
+  function __construct($entity_type, $entity_id) {
+    $this->uuid = false;
+    $this->entity = false;
+
+    $query = 'SELECT e.* FROM {eck_' . $entity_type . '} e WHERE e.id = :entity_id';
+    $args = [
+      ':entity_id' => $entity_id,
+    ];
+    $q = db_query($query, $args);
+    foreach($q as $row) {
+      $this->entity = $row;
+      $this->uuid = $row->uuid;
+    }
+  }
+}
+
+function build_uuid_dir_path($array) {
+  $pieces = [];
+  foreach($array as $key => $value) {
+    $entity = new NyTechGetUuidByEntityID($key, $value);
+    if(!empty($entity->uuid)) {
+      $pieces[] = $entity->uuid;
+    }
+  }
+  return implode('/', $pieces);
+}
+
+class NyTechFieldImg {
+  public $entity_type;
+  public $entity;
+  public $field_name;
+  public $image_style;
+  public $field;
+  public $output;
+  public $output_thumbnail;
+  public $urls;
+  public $fids;
+
+  function __construct($entity_type, $entity, $field_name, $image_style = null) {
+    $this->entity_type = $entity_type;
+    $this->entity = $entity;
+    $this->field_name = $field_name;
+    $this->image_style = $image_style;
+    $this->field = field_get_items($this->entity_type, $this->entity, $this->field_name);
+    $this->fids = false;
+  }
+
+  public function output() {
+    $output = null;
+    $output_thumbnail = null;
+    $urls = [];
+    $fids = [];
+    $image_style = null;
+    if(is_array($this->field)) {
+      foreach($this->field as $key => $item) {
+        // Set output;
+        $fids[] = (int) $item['fid'];
+        $field_item = field_view_value($this->entity_type, $this->entity, $this->field_name, $item, array(
+          'type' => 'image',
+          'settings' => array(
+            'image_style' => $this->get_image_style(),
+          ),
+        ));
+        $output .= drupal_render($field_item);
+
+        $field_item_thumbnail = field_view_value($this->entity_type, $this->entity, $this->field_name, $item, array(
+          'type' => 'image',
+          'settings' => array(
+            'image_style' => 'default', // Default is a image style that resizes and crops to a static 250x250.
+          ),
+        ));
+        $output_thumbnail .= drupal_render($field_item_thumbnail);
+
+        // Set image url;
+        $urls[$key] = file_create_url($item['uri']);
+      }
+    } else {
+      // Get field info.
+      $field = field_info_field($this->field_name);
+
+      if (isset($field['settings']['default_image']) && !empty($field['settings']['default_image']['fid'])) {
+        $default_fid = $field['settings']['default_image']['fid'];
+        $file = file_load($default_fid);
+        $default_image_uri = $file->uri;
+        $default_image_url = file_create_url($default_image_uri);
+        $urls = [$default_image_url];
+        $output = theme('image_style', array('style_name' => 'default', 'path' => $default_image_url));
+      }
+    }
+    $this->urls = $urls;
+    $this->output = $output;
+    $this->output_thumbnail = $output_thumbnail;
+    $this->fids = $fids;
+  }
+
+  /*
+   * If the no image style is passed in, then the original image iw used. This is a Drupal default.
+   */
+  private function get_image_style() {
+    $image_style = null;
+    if(is_string($this->image_style) && !empty($this->image_style)) {
+      $image_style = $this->image_style;
+    }
+    return $image_style;
+  }
+}
+
+class NyTechFieldPDF {
+  public $entity_type;
+  public $entity;
+  public $field_name;
+  public $field;
+  public $fid;
+  public $file;
+  public $url;
+
+  function __construct($entity_type, $entity, $field_name) {
+    $this->entity_type = $entity_type;
+    $this->entity = $entity;
+    $this->field_name = $field_name;
+    $this->file();
+    $this->urls();
+  }
+
+  public function file() {
+    if(!empty($this->entity->field_doc_pdf)) {
+      $field_name = $this->field_name;
+      $this->fid = $this->entity->$field_name['und'][0]['fid'];
+      $this->file = file_load($this->fid);
+    }
+  }
+
+  public function urls() {
+    if(!empty($this->file)) {
+      $this->url = file_create_url($this->file->uri);
+    }
+  }
+
+  /*
+   * If the no image style is passed in, then the original image iw used. This is a Drupal default.
+   */
+  private function get_image_style() {
+    $image_style = null;
+    if(is_string($this->image_style) && !empty($this->image_style)) {
+      $image_style = $this->image_style;
+    }
+    return $image_style;
+  }
+}
+
+class NyTechImageFormSubmit {
+
+  public $file;
+
+  function __construct($fidNew, $fidOld = false, $destination, $area) {
+    if($fidNew == $fidOld) {
+      $this->file = (array) file_load($fidOld);
+    } else {
+      // Remove old file
+      $fileOld = file_load($fidOld);
+      file_delete($fileOld);
+
+      // Save new file
+      $area = $this->area($area);
+      $fileNew = file_load($fidNew);
+      $fileMoved = new NyTechFileMove($fileNew);
+      $fileMoved->move($destination, $area);
+      $this->file = $fileMoved->file_array();
+    }
+  }
+
+  private function area($area) {
+    $this->area = $area;
+    if(!is_string($this->area)) {
+      $this->area = 'tank';
+    }
+  }
+
+  public function file() {
+    return $this->file;
+  }
+}
+
+function nytech_master_file_download ($uri){
+
+
+}
+
+class NyTechJobEntities {
+  public $org_id;
+  public $job_id;
+  public $entity_type;
+  public $bundle;
+  public $sort;
+  public $sort_on;
+  public $status;
+  public $field_fragment_id;
+  public $count;
+  public $objects;
+
+  function __construct($org_id, $job_id, $entity_type, $field_fragment_id) {
+    $this->org_id = (int) $org_id;
+    $this->job_id = (int) $job_id;
+    $this->entity_type = $entity_type;
+    $this->bundle = 'standard';
+    $this->sort_on = 'created';
+    $this->sort = 'DESC';
+    $this->field_fragment_id = $field_fragment_id;
+    $this->status = 1;
+    $this->count = 0;
+  }
+
+  public function set_bundle($var) {
+    $this->bundle = $var;
+  }
+
+  public function set_status($var) {
+    $this->status = $var;
+  }
+
+  public function set_sort_on($var) {
+    $this->sort_on = $var;
+  }
+
+  public function set_sort($var) {
+    $this->sort = $var;
+  }
+
+  public function query($limit = 25) {
+    if(!empty($this->org_id) && !empty($this->job_id)) {
+      $query = new EntityFieldQuery();
+      $query->entityCondition('entity_type', $this->entity_type)
+        ->entityCondition('bundle', $this->bundle)
+        ->propertyOrderBy($this->sort_on, $this->sort)
+        ->propertyCondition('status', $this->status, '=')
+        ->fieldCondition('field_' . $this->field_fragment_id . '_related_org', 'target_id', $this->org_id, '=')
+        ->fieldCondition('field_' . $this->field_fragment_id . '_related_job', 'target_id', $this->job_id, '=')
+        ->range(0, $limit)
+        ->addMetaData('account', user_load(1));
+
+      $result = $query->execute();
+      if (isset($result[$this->entity_type])) {
+        $ids = array_keys($result[$this->entity_type]);
+        $this->objects = entity_load($this->entity_type, $ids);
+        $this->count = count($this->objects);
+      }
+    }
+  }
+}
+
+function root_url() {
+  global $base_url;
+  return $base_url . '/';
+}
+
+function theme_modal($content = '', $top = '', $bottom = '') {
+  $array = [
+    'top'     => $top,
+    'content' => $content,
+    'bottom'  => $bottom,
+  ];
+  return theme('nytech_modal_fake', $array);
+}
+
+function theme_simple($content = '', $back = '') {
+  $array = [
+    'back' => $back,
+    'content' => $content,
+  ];
+  return theme('nytech_item_simple', $array);
+}
+
+function theme_collapse($content, $trigger) {
+  $array = [
+    'content' => $content,
+    'trigger' => $trigger,
+    'uuid' => uuid_generate(),
+  ];
+  return theme('nytech_collapse', $array);
+}
+
+class NyTechQueue {
+  public $queue_name;
+  public $count;
+  public $queue;
+
+  function __construct($queue_name) {
+    $this->set_name($queue_name);
+    if(!is_string($this->queue_name)) {
+      exit;
+    }
+  }
+
+  function init() {
+    if(empty($this->queue)) {
+      $this->queue = DrupalQueue::get($this->queue_name);
+    }
+  }
+
+  public function set_name($name) {
+    $this->queue_name = $name;
+  }
+
+  public function add_item($data) {
+    // Ensures ->init() has been done only once.
+    $this->init();
+    /*
+     * $queue->createItem($data) being implemented directly so that we can get the id back rather than "true"/"false".
+     * https://api.drupal.org/api/drupal/modules%21system%21system.queue.inc/function/SystemQueue%3A%3AcreateItem/7.x
+     */
+    $query = db_insert('queue')
+      ->fields(array(
+        'name' => $this->queue_name,
+        'data' => serialize($data),
+        // We cannot rely on REQUEST_TIME because many items might be created
+        // by a single request which takes longer than 1 second.
+        'created' => time(),
+      ));
+    // The $queue->itemAdd looks like this: return (bool) $query->execute(); By removing the "bool" we get back the row ID (key).
+    return $query->execute();
+  }
+
+  public function count() {
+    $query = '
+      SELECT q.item_id, q.name
+      FROM {queue} q
+      WHERE q.name = :name
+    ';
+    $this->count = (int) db_query($query, [':name' => $this->queue_name])->rowCount();
+  }
+}
+
+/**
+ * Implements hook_mail().
+ */
+function nytech_master_mail($key, &$message, $params) {
+  switch ($key) {
+    case 'nytech_master_email':
+      // Headers
+      $message['headers']['MIME-Version'] = '1.0';
+      $message['headers']['Content-Type'] = 'multipart/mixed;';
+      $message['headers']['Content-Type'] = 'text/html;';
+
+      // Subject
+      $message['subject'] = $params['subject'];
+
+      // Body content yo!
+      foreach($params['message'] as $row) {
+        $message['body'][] = $row . "<br />";
+      }
+      $message['body'][]  = $params['action_url'];
+      break;
+  }
+}
+
+class NyTechSendEmail {
+  public $to_email;
+  public $to_name;
+  public $from_email;
+  public $from_name;
+  public $subject;
+  public $message;
+  public $action_url;
+
+  public $root;
+  public $result;
+  public $success;
+  public $module;
+  public $key;
+  public $language;
+  public $params;
+  public $send;
+
+  function __construct($module = 'nytech_master') {
+    $rand = rand(1000, 9999);
+    $this->root = root_url();
+    $this->from_email = variable_get('no_reply_email', 'noreply@hammerheaddocs.com');
+    $this->from_name = 'Hammerhead Docs';
+    $this->subject = 'Hammerhead Docs Notification ' . $rand;
+    $this->action_url = $this->root;
+
+    $this->module = $module;
+    $this->key = 'nytech_master_email';
+    $this->language = language_default();
+    $this->params = [
+      'subject' => $this->subject,
+      'message' => $this->message,
+    ];
+    $this->send = true;
+  }
+
+  public function from_email($var) {
+    $this->from_email = $var;
+  }
+
+  public function from_name($var) {
+    $this->from_name = $var;
+  }
+
+  public function to_email($var) {
+    $this->to_email = $var;
+  }
+
+  public function to_name($var) {
+    $this->to_name = $var;
+  }
+
+  public function subject($var) {
+    $this->subject     = $var;
+    $params            = $this->params;
+    $params['subject'] = $this->subject;
+    $this->params      = $params;
+  }
+
+  public function add_message($var) {
+    $var = nl2br($var);
+    $message             = $this->message;
+    $params              = $this->params;
+
+    $params['message'][] = $var;
+    $message[]           = $var;
+
+    $this->params        = $params;
+    $this->message       = $message;
+  }
+
+  public function action_url($path) {
+    $this->action_url     = $this->root . $path;
+    $params               = $this->params;
+    $params['link']       = $this->action_url;
+    $params['action_url'] = $this->action_url;
+    $this->params         = $params;
+  }
+
+  public function add_params($array) {
+    $params = $this->params;
+    $params = array_merge($params, $array);
+    $this->params = $params;
+  }
+
+  public function send() {
+    $result = drupal_mail($this->module, $this->key, $this->to_email, $this->language, $this->params, $this->from_email, $this->send);
+    $this->result = $result;
+    if($this->result['result'] == true) {
+      $this->success = true;
+    }
+  }
+
+}
+
+class NyTechEntityResourceDownload {
+  function __construct($entity_type, $entity) {
+    $this->entity_type = $entity_type;
+    $this->entity = $entity;
+    $this->file($entity);
+  }
+
+  private function file($entity) {
+    switch ($this->entity_type) {
+      case 'document':
+        if(!empty($entity->field_doc_pdf)) {
+          $file = $entity->field_doc_pdf['und'][0];
+        }
+        break;
+      case 'image':
+        if(!empty($entity->field_img_image)) {
+          $file = $entity->field_img_image['und'][0];
+        }
+        break;
+      case 'receipt':
+        if(!empty($entity->field_r_receipt_image)) {
+          $file = $entity->field_r_receipt_image['und'][0];
+        }
+        break;
+    }
+
+    if($file) {
+
+      if ($file && file_exists($file['uri'])) {
+        // Set the headers to force the download.
+        drupal_add_http_header('Content-Type', $file['filemime']);
+        drupal_add_http_header('Content-Disposition', 'attachment; filename="' . $file['filename'] . '"');
+        drupal_add_http_header('Content-Length', filesize($file['uri']));
+
+        // Output the file content.
+        readfile($file['uri']);
+
+        // Terminate the script.
+        drupal_exit();
+      }
+      else {
+        drupal_not_found();
+      }
+
+    }
+  }
+}

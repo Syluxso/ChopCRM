@@ -1,0 +1,6 @@
+name = NyTech Deal
+description = Nyberg Technology Deal system.
+core = 7.x
+package = NyTech
+
+files[] = nytech_deal.module

@@ -1,0 +1,6 @@
+name = NyTech Account
+description = Nyberg Technology Acc system.
+core = 7.x
+package = NyTech
+
+files[] = nytech_account.module
