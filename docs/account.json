@@ -1,23 +1,22 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "Auth",
-    "description": "Authentication & Authorization",
+    "title": "ChopCRM",
+    "description": "ChopCRM Rest Endpoints",
     "version": "1.0.0"
   },
   "servers": [
-  {
-    "url": "https://dev-chopcrm.pantheon.io"
-  }
+    {
+      "url": "https://dev-chopcrm.pantheon.io"
+    }
   ],
   "paths": {
     "/api/v1/auth": {
       "get": {
-        "summary": "Obtain Session ID (sid)",
-        "description": "Obtain a Session ID (sid) to be used for auth on all further api calls.",
+        "summary": "Create or Validate a Session ID (sid).",
         "responses": {
           "200": {
-            "description": "Basic auth was successful.",
+            "description": "Basic auth or sid validation was successful.",
             "content": {
               "application/json": {
                 "schema": {
@@ -33,13 +32,6 @@
                       "type": "object"
                     }
                   }
-                },
-                "example": {
-                  "code": 200,
-                  "Message": "Ok",
-                  "data": [
-                    "User object will go here."
-                  ]
                 }
               }
             }
