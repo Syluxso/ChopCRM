@@ -15,6 +15,27 @@
       "get": {
         "summary": "Obtain Session ID (sid)",
         "description": "Obtain a Session ID (sid) to be used for auth on all further api calls.",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Basic authentication credentials",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "header",
+            "description": "Session ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "test123"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Basic auth was successful.",

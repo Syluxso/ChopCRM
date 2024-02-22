@@ -1,0 +1,30 @@
+openapi: 3.0.0
+info:
+  title: ChopCRM
+  version: 1.0.0
+servers:
+  - url: http://localhost
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+paths:
+  /chopcrm/api/v1/test:
+    get:
+      tags:
+        - General
+      summary: http://localhost/chopcrm/api/v1/test
+      security:
+        - basicAuth: []
+      parameters:
+        - name: sid
+          in: header
+          schema:
+            type: string
+          example: 0XsIKpRBMESlbR3S_cwXkW760DmHe75Jqg849BV0W7E
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
