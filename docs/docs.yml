@@ -1,32 +1,54 @@
-openapi: 3.0.0
-info:
-  title: ChopCRM
-  description: ChopCRM Rest Endpoints
-  version: 1.0.0
-servers:
-  - url: https://github.com/Syluxso/ChopCRM/blob/master/docs/docs.yml
-paths:
-  /api/v1/auth:
-    get:
-      summary: Create or Validate a Session ID (sid).
-      responses:
-        '200':
-          description: Basic auth or sid validation was successfull.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/User'
-components:
-  schemas:
-    User:
-      type: object
-      properties:
-        user_id:
-          type: integer
-          format: int64
-        username:
-          type: string
-        email:
-          type: string
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "ChopCRM",
+    "description": "ChopCRM Rest Endpoints",
+    "version": "1.0.0"
+  },
+  "servers": [
+  {
+    "url": "https://github.com/Syluxso/ChopCRM/blob/master/docs/docs.yml"
+  }
+  ],
+  "paths": {
+    "/api/v1/auth": {
+      "get": {
+        "summary": "Create or Validate a Session ID (sid).",
+        "responses": {
+          "200": {
+            "description": "Basic auth or sid validation was successfull.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
